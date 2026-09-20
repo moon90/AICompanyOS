@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing and Type Checking
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Node & Next.js
+apps/web/node_modules/
+node_modules/
+apps/web/.next/
+.next/
+apps/web/out/
+out/
+apps/web/build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secrets (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+
+# Databases
+*.sqlite3
+*.db
+
+# Operating System & IDE
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local artifact directory
+scratch/

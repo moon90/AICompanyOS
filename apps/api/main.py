@@ -1,0 +1,48 @@
+"""FastAPI Application Entrypoint for AI Company OS."""
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from apps.api.routes.health import router as health_router
+from infrastructure.config import Settings, get_settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan context manager for startup and shutdown events."""
+    # Startup logic
+    yield
+    # Shutdown logic
+
+
+def create_application(settings: Settings | None = None) -> FastAPI:
+    """FastAPI application factory."""
+    app_settings = settings or get_settings()
+
+    application = FastAPI(
+        title=app_settings.app_name,
+        version=app_settings.app_version,
+        debug=app_settings.debug,
+        lifespan=lifespan,
+    )
+    application.state.settings = app_settings
+
+    # CORS configuration
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Register routers
+    application.include_router(health_router)
+
+    return application
+
+
+app = create_application()
