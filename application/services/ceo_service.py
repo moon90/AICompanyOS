@@ -18,7 +18,11 @@ from infrastructure.database.models import (
     CeoPlan,
     Company,
     CompanyMember,
+    DelegationRecord,
     Department,
+    Project,
+    Task,
+    TaskDependency,
 )
 from infrastructure.llm.gateway import LLMGateway
 from orchestration.planner.schemas import GoalIntake
@@ -266,3 +270,202 @@ class CeoService:
         if not plan:
             raise PlanNotFoundError(f"Plan '{plan_id}' not found in company '{company_id}'.")
         return plan
+
+    async def delegate_plan(
+        self,
+        user_id: str,
+        company_id: str,
+        plan_id: str,
+        project_id: str | None = None,
+        project_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Decompose a proposed CEO plan into an authoritative Project, Parent Task, Child Tasks, DAG dependencies, and DelegationRecords per docs/Phases.md Section 11."""
+        await self._verify_membership(user_id, company_id)
+
+        # 1. Load CeoPlan
+        plan = await self.get_plan(user_id=user_id, company_id=company_id, plan_id=plan_id)
+        if plan.status == "delegated" and plan.project_id:
+            raise ValueError(
+                f"Plan '{plan_id}' has already been delegated to project '{plan.project_id}'."
+            )
+
+        # 2. Resolve CEO agent if available
+        ceo_agent = None
+        try:
+            ceo_agent = await self.get_company_ceo(user_id, company_id)
+        except CeoNotFoundError:
+            ceo_agent = None
+
+        # 3. Create or resolve Project
+        project: Project
+        if project_id:
+            proj_res = await self.db.execute(
+                select(Project).where(Project.id == project_id, Project.company_id == company_id)
+            )
+            found_proj = proj_res.scalars().first()
+            if not found_proj:
+                raise ValueError(
+                    f"Target project '{project_id}' not found in company '{company_id}'."
+                )
+            project = found_proj
+        else:
+            resolved_name = project_name or f"Strategic: {plan.goal[:60]}"
+            project = Project(
+                id=str(uuid.uuid4()),
+                company_id=company_id,
+                name=resolved_name,
+                description=plan.reasoning_summary,
+                objective=plan.requested_outcome or plan.goal,
+                status="IN_PROGRESS",
+                priority=plan.priority,
+                owner_user_id=user_id,
+                owner_agent_id=ceo_agent.id if ceo_agent else None,
+            )
+            self.db.add(project)
+            await self.db.flush()
+
+        # 4. Create 1 Parent Task representing the overarching strategic mission
+        parent_task = Task(
+            id=str(uuid.uuid4()),
+            company_id=company_id,
+            project_id=project.id,
+            parent_task_id=None,
+            title=f"Strategic Objective: {plan.goal[:100]}",
+            description=plan.reasoning_summary,
+            objective=plan.requested_outcome or plan.goal,
+            created_by_user_id=user_id,
+            created_by_agent_id=ceo_agent.id if ceo_agent else None,
+            assigned_to_agent_id=ceo_agent.id if ceo_agent else None,
+            department_id=None,
+            status="ASSIGNED" if ceo_agent else "CREATED",
+            priority=plan.priority,
+        )
+        self.db.add(parent_task)
+        await self.db.flush()
+
+        # 5. Load company departments and active agents for step assignment resolution
+        dept_res = await self.db.execute(
+            select(Department).where(Department.company_id == company_id)
+        )
+        dept_map: dict[str, str] = {d.code.lower(): d.id for d in dept_res.scalars().all()}
+
+        agent_res = await self.db.execute(
+            select(Agent).where(Agent.company_id == company_id, Agent.status == "active")
+        )
+        agents = agent_res.scalars().all()
+        agents_by_id: dict[str, Agent] = {a.id: a for a in agents}
+
+        # 6. Create Multiple Child Tasks and Delegation Records
+        step_task_map: dict[str, Task] = {}
+        child_tasks: list[Task] = []
+        delegations: list[DelegationRecord] = []
+
+        for step in plan.plan_steps:
+            step_id = step.get("step_id", str(uuid.uuid4()))
+            step_title = step.get("title", "Untitled Task")
+            step_desc = step.get("description", "")
+            step_output = step.get("expected_output", "")
+            dept_code = (step.get("department_code") or "").lower()
+            dept_id = dept_map.get(dept_code)
+
+            # Resolve assigned agent
+            assigned_agent: Agent | None = None
+            raw_agent_id = step.get("assigned_agent_id")
+            if raw_agent_id and raw_agent_id in agents_by_id:
+                assigned_agent = agents_by_id[raw_agent_id]
+            else:
+                # Fallback match by department or role
+                role_target = (step.get("assigned_agent_role") or "").lower()
+                for ag in agents:
+                    if role_target and (
+                        role_target in ag.role.lower() or role_target in ag.name.lower()
+                    ):
+                        assigned_agent = ag
+                        break
+                if not assigned_agent and dept_id:
+                    # Match department lead or first agent in department
+                    for ag in agents:
+                        if ag.department_id == dept_id:
+                            assigned_agent = ag
+                            break
+
+            child_task = Task(
+                id=str(uuid.uuid4()),
+                company_id=company_id,
+                project_id=project.id,
+                parent_task_id=parent_task.id,
+                title=step_title,
+                description=step_desc,
+                objective=step_output,
+                created_by_user_id=user_id,
+                created_by_agent_id=ceo_agent.id if ceo_agent else None,
+                assigned_to_agent_id=assigned_agent.id if assigned_agent else None,
+                department_id=dept_id or (assigned_agent.department_id if assigned_agent else None),
+                status="ASSIGNED" if assigned_agent else "READY",
+                priority=plan.priority,
+            )
+            self.db.add(child_task)
+            await self.db.flush()
+
+            step_task_map[step_id] = child_task
+            child_tasks.append(child_task)
+
+            # Record delegation from CEO/User to assigned agent
+            if assigned_agent:
+                delegation = DelegationRecord(
+                    id=str(uuid.uuid4()),
+                    company_id=company_id,
+                    task_id=child_task.id,
+                    delegated_by_user_id=user_id if ceo_agent is None else None,
+                    delegated_by_agent_id=ceo_agent.id if ceo_agent else None,
+                    delegated_to_agent_id=assigned_agent.id,
+                    scope=step.get("verification_criteria"),
+                    reason=f"Delegated from CEO for plan step: {step_title}",
+                    depth=1,
+                    status="active",
+                )
+                self.db.add(delegation)
+                delegations.append(delegation)
+
+        # 7. Link Task Dependencies from plan DAG
+        dependencies: list[TaskDependency] = []
+        for step in plan.plan_steps:
+            raw_step_id = step.get("step_id")
+            if not raw_step_id or not isinstance(raw_step_id, str):
+                continue
+            current_task = step_task_map.get(raw_step_id)
+            if not current_task:
+                continue
+
+            for dep_step_id in step.get("depends_on", []):
+                if not dep_step_id or not isinstance(dep_step_id, str):
+                    continue
+                dep_task = step_task_map.get(dep_step_id)
+                if dep_task and dep_task.id != current_task.id:
+                    dep_link = TaskDependency(
+                        id=str(uuid.uuid4()),
+                        company_id=company_id,
+                        task_id=current_task.id,
+                        depends_on_task_id=dep_task.id,
+                    )
+                    self.db.add(dep_link)
+                    dependencies.append(dep_link)
+
+        # 8. Update CeoPlan status and reference
+        plan.status = "delegated"
+        plan.project_id = project.id
+
+        await self.db.commit()
+        await self.db.refresh(plan)
+
+        return {
+            "plan_id": plan.id,
+            "project_id": project.id,
+            "project_name": project.name,
+            "parent_task_id": parent_task.id,
+            "parent_task_title": parent_task.title,
+            "child_tasks_count": len(child_tasks),
+            "child_task_ids": [t.id for t in child_tasks],
+            "dependencies_count": len(dependencies),
+            "delegations_count": len(delegations),
+        }

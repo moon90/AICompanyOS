@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -192,6 +193,11 @@ class Company(Base):
     )
     tasks: Mapped[list["Task"]] = relationship(
         "Task",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    delegation_records: Mapped[list["DelegationRecord"]] = relationship(
+        "DelegationRecord",
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -539,6 +545,13 @@ class CeoPlan(Base):
     company: Mapped["Company"] = relationship("Company", back_populates="plans")
     user: Mapped["User"] = relationship("User")
     ceo_agent: Mapped["Agent | None"] = relationship("Agent")
+    project_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project: Mapped["Project | None"] = relationship("Project")
 
 
 # Table indexes
@@ -750,6 +763,11 @@ class Task(Base):
         back_populates="depends_on_task",
         cascade="all, delete-orphan",
     )
+    delegation_records: Mapped[list["DelegationRecord"]] = relationship(
+        "DelegationRecord",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
 
 
 class TaskDependency(Base):
@@ -806,3 +824,89 @@ Index("ix_tasks_company_project", Task.company_id, Task.project_id)
 Index("ix_tasks_company_assigned", Task.company_id, Task.assigned_to_agent_id)
 Index("ix_tasks_company_created", Task.company_id, Task.created_at)
 Index("ix_task_dependencies_company", TaskDependency.company_id)
+
+
+class DelegationRecord(Base):
+    """Delegation history record adhering to docs/Memory.md Section 18 and docs/Rules.md §§ 60 & 61."""
+
+    __tablename__ = "delegation_records"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    delegated_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    delegated_by_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    delegated_to_agent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="active",
+        server_default="active",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="delegation_records")
+    task: Mapped["Task"] = relationship("Task", back_populates="delegation_records")
+    delegated_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[delegated_by_user_id]
+    )
+    delegated_by_agent: Mapped["Agent | None"] = relationship(
+        "Agent", foreign_keys=[delegated_by_agent_id]
+    )
+    delegated_to_agent: Mapped["Agent"] = relationship(
+        "Agent", foreign_keys=[delegated_to_agent_id]
+    )
+
+
+Index(
+    "ix_delegation_records_company_task",
+    DelegationRecord.company_id,
+    DelegationRecord.task_id,
+)
+Index(
+    "ix_delegation_records_company_target",
+    DelegationRecord.company_id,
+    DelegationRecord.delegated_to_agent_id,
+)
+Index(
+    "ix_delegation_records_company_created",
+    DelegationRecord.company_id,
+    DelegationRecord.created_at,
+)

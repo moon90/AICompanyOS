@@ -300,6 +300,41 @@ export interface TaskListResponse {
   total: number;
 }
 
+export interface DelegationRecord {
+  id: string;
+  company_id: string;
+  task_id: string;
+  delegated_by_user_id: string | null;
+  delegated_by_agent_id: string | null;
+  delegated_to_agent_id: string;
+  scope: string | null;
+  reason: string;
+  depth: number;
+  status: string;
+  created_at: string;
+  delegated_to_agent_name: string | null;
+  delegated_to_agent_role: string | null;
+  delegated_by_agent_name: string | null;
+  delegated_by_user_name: string | null;
+}
+
+export interface DelegationListResponse {
+  items: DelegationRecord[];
+  total: number;
+}
+
+export interface PlanDelegationResult {
+  plan_id: string;
+  project_id: string;
+  project_name: string;
+  parent_task_id: string;
+  parent_task_title: string;
+  child_tasks_count: number;
+  child_task_ids: string[];
+  dependencies_count: number;
+  delegations_count: number;
+}
+
 export interface ApiError {
   detail: string;
   status: number;
@@ -820,6 +855,73 @@ export const api = {
     return request<void>(`/api/v1/companies/${companyId}/tasks/${taskId}`, {
       method: "DELETE",
     });
+  },
+
+  async delegateTask(
+    companyId: string,
+    taskId: string,
+    data: {
+      target_agent_id: string;
+      reason?: string;
+      scope?: string;
+      delegator_agent_id?: string;
+    }
+  ): Promise<DelegationRecord> {
+    return request<DelegationRecord>(
+      `/api/v1/companies/${companyId}/tasks/${taskId}/delegate`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async getTaskDelegations(
+    companyId: string,
+    taskId: string
+  ): Promise<DelegationRecord[]> {
+    return request<DelegationRecord[]>(
+      `/api/v1/companies/${companyId}/tasks/${taskId}/delegations`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async listCompanyDelegations(
+    companyId: string,
+    params?: {
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<DelegationListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit !== undefined) searchParams.append("limit", params.limit.toString());
+    if (params?.offset !== undefined) searchParams.append("offset", params.offset.toString());
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return request<DelegationListResponse>(
+      `/api/v1/companies/${companyId}/delegations${query}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async delegatePlan(
+    companyId: string,
+    planId: string,
+    data?: {
+      project_id?: string;
+      project_name?: string;
+    }
+  ): Promise<PlanDelegationResult> {
+    return request<PlanDelegationResult>(
+      `/api/v1/companies/${companyId}/ceo/plans/${planId}/delegate`,
+      {
+        method: "POST",
+        body: JSON.stringify(data || {}),
+      }
+    );
   },
 };
 

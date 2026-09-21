@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 6 — Projects & Basic Tasks** (COMPLETE)
+**Phase 7 — Task Assignment & Delegation** (COMPLETE)
 
 ---
 
@@ -289,20 +289,65 @@
   * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_tasks.py`.
   * Added 2 frontend unit tests in `apps/web/lib/api.test.ts`.
 
+### Phase 7 — Task Assignment & Delegation (COMPLETE)
+* **Authoritative Persistence & Data Modeling (`infrastructure/database/models.py`):**
+  * `DelegationRecord` model (`delegation_records` table) storing first-class audit records of every hierarchical task delegation:
+    * `id`, `company_id`, `task_id`, `delegated_by_user_id` (optional), `delegated_by_agent_id` (optional), `delegated_to_agent_id` (required), `scope`, `reason`, `depth` (integer hop counter), `status`, `created_at`.
+  * Added foreign key column `ceo_plans.project_id` linking strategic plans to decomposed projects upon delegation.
+  * Added cascade relationships: `Company.delegation_records`, `Task.delegation_records`, and indexes on `(company_id, created_at)` and `(task_id, created_at)`.
+* **Database Migration (`database/migrations/versions/0007_create_delegation_system.py`):**
+  * Created migration `0007_create_delegation_system`. Applied cleanly to PostgreSQL via `alembic upgrade head`. Reversibility verified with downgrade/upgrade cycle. `alembic check` verified with 0 schema drift.
+* **Domain Layer (`domain/delegation/`):**
+  * Domain exceptions: `DelegationError`, `CircularDelegationError`, `MaxDelegationDepthExceededError`, `InvalidDelegationHierarchyError`, `DelegationAccessDeniedError`, `DelegationNotFoundError`.
+  * `DelegationRuleEngine`: Enforces deterministic organizational hierarchy rules:
+    * Tenant match: Delegator, delegatee, and task must belong to the same company.
+    * Upward delegation rejection: Agents cannot delegate upward to their direct or indirect managers.
+    * Department isolation: Department heads/leads can only delegate to agents within their own department.
+    * Specialist restrictions: Specialists (authority level 1) cannot delegate further.
+    * Circular delegation rejection: Traverses prior task delegation lineage and organizational ancestry to prevent cycles ($A \to B \to A$).
+    * Maximum depth bound: Rejects delegations exceeding `max_depth = 3`.
+    * Active agent checks: Rejects delegation to inactive agents.
+* **Application Services (`application/services/`):**
+  * `DelegationService`: Manages task delegation lifecycle, enforces domain validation rules, transitions task status to `ASSIGNED` with `assigned_to_agent_id`, creates immutable `DelegationRecord`, and retrieves chronological task lineages.
+  * `CeoService.delegate_plan`: Bridges Phase 5 (CEO Plans) and Phase 6 (Projects/Tasks):
+    * Validates CEO plan proposal state and converts it to 1 `Project`, 1 Parent `Task`, multiple Child `Task`s (`parent_task_id = parent_task.id`), and `TaskDependency` graph edges matching plan DAG steps.
+    * Creates initial `DelegationRecord` entries for assigned tasks.
+    * Attaches `project_id` to `CeoPlan` and marks status as `DELEGATED`.
+  * Updated `SystemService`: `CURRENT_PHASE = "Phase 7 — Task Assignment & Delegation"`.
+* **API Layer (`apps/api/`):**
+  * Schemas: `TaskDelegateRequest`, `DelegationRecordResponse`, `DelegationListResponse`, `PlanDelegateRequest`, `PlanDelegationResultResponse` in `apps/api/schemas/delegation.py`.
+  * Route handlers:
+    * `POST /api/v1/companies/{company_id}/tasks/{task_id}/delegate`
+    * `GET /api/v1/companies/{company_id}/tasks/{task_id}/delegations`
+    * `GET /api/v1/companies/{company_id}/delegations`
+    * `POST /api/v1/companies/{company_id}/ceo/plans/{plan_id}/delegate`
+  * Routers mounted in `apps/api/main.py`.
+* **Frontend Web Application (`apps/web/`):**
+  * `apps/web/lib/api.ts`: Added `DelegationRecord`, `DelegationListResponse`, `PlanDelegationResult` interfaces and client methods `delegateTask`, `getTaskDelegations`, `listCompanyDelegations`, `delegatePlan`.
+  * CEO Console (`apps/web/app/ceo/page.tsx`): Added "Delegate & Launch Workflows" button on proposed plans, status pill handling for `delegated`, and success notification banner linking to created project and decomposed tasks.
+  * Task Console (`apps/web/app/tasks/page.tsx`): Added "Delegate Task" button and interactive inline delegation form, plus chronological "Delegation Lineage" timeline in Task Detail Drawer showing hops, depth badges, delegator $\to$ delegatee, directives, and timestamps.
+  * Dashboard (`apps/web/app/page.tsx`): Updated operational indicators to `Phase 7 Active`.
+* **Testing & Quality Assurance:**
+  * Added 10 unit tests in `tests/unit/test_delegation_rules.py`.
+  * Added 3 unit tests in `tests/unit/test_delegation_service.py`.
+  * Added 1 unit test in `tests/unit/test_ceo_delegation.py`.
+  * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_delegation.py`.
+  * Added 2 frontend client unit tests in `apps/web/lib/api.test.ts`.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (61 passed in 7.71s) |
+| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (76 passed in 8.62s) |
 | **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (106 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (98 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (18 tests in 2 files in 270ms) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (117 files compliant) |
+| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (109 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (20 tests in 2 files in 255ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0006` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0007` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
 | **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
 
@@ -310,21 +355,22 @@
 
 ## Important Architectural Decisions
 
-1. **Persistent Projects and Tasks Before Autonomous Execution:**
-   Projects and tasks exist as authoritative PostgreSQL records with strict state machines before any background agent execution loops (Phase 8) or automated CEO delegation (Phase 7) are introduced.
-2. **Dedicated Task Dependencies with Cycle Prevention:**
-   A dedicated `TaskDependency` table stores directed prerequisite edges. `TaskService` performs breadth-first search reachability analysis on existing company dependencies to reject any self-dependency or circular dependency ($A \to B \to A$ or transitive).
-3. **State Machine Integrity & Automatic Timestamps:**
-   Tasks cannot skip lifecycle stages arbitrarily. Transitioning into `IN_PROGRESS` automatically records `started_at`, entering terminal statuses records `completed_at`, and re-opening a task clears `completed_at`.
-4. **Kanban Deferred to Phase 10:**
-   Kanban boards are a visual perspective of project and task state; Phase 6 establishes authoritative state and tabular/drawer views without building a separate Kanban subsystem.
+1. **Deterministic Hierarchical Delegation Before Autonomous Execution:**
+   Tasks are assigned and delegated down organizational chains (CEO $\to$ Dept Heads $\to$ Specialists) via deterministic rules and stored audit records before autonomous agent execution loops (Phase 8) are introduced.
+2. **First-Class Auditability with `DelegationRecord`:**
+   Every delegation action produces an immutable `DelegationRecord` with hop counter (`depth`), delegator, delegatee, directive/reason, and timestamp.
+3. **Strict Loop & Depth Prevention:**
+   The `DelegationRuleEngine` prevents circular delegation ($A \to B \to A$) and limits delegation chains to a maximum depth of 3 (`max_depth = 3`). Specialists cannot sub-delegate.
+4. **Decomposition of CEO Plans into Projects and DAG Tasks:**
+   Delegating a `CeoPlan` automatically materializes 1 Project, 1 Parent Task, and Child Tasks with `TaskDependency` prerequisites matching the synthesized plan graph, transitioning the plan into `DELEGATED`.
 5. **Runtime Agent Presence Remains 0:**
-   Assigning a task to a registered agent records the organizational assignment, but does not activate runtime execution or background agent presence (Phase 14).
+   Delegating tasks to registered agents records the organizational assignment, but does not activate runtime execution or background agent presence (Phase 14).
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 7 — Task Assignment & Delegation**
+**Phase 8 — Agent Execution Engine**
 *(Awaiting user authorization before proceeding).*
+
 

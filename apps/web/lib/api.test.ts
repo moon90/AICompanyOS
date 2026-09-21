@@ -614,6 +614,104 @@ describe("Web API Client", () => {
     );
   });
 
+  it("delegateTask, getTaskDelegations, and listCompanyDelegations perform correct requests", async () => {
+    const mockRecord = {
+      id: "del-1",
+      company_id: "comp-1",
+      task_id: "task-1",
+      delegated_by_user_id: "user-1",
+      delegated_by_agent_id: null,
+      delegated_to_agent_id: "agent-2",
+      delegated_by_user_name: "Human Operator",
+      delegated_to_agent_name: "Lead Frontend Engineer",
+      delegated_to_agent_role: "frontend_engineer",
+      delegated_by_agent_name: null,
+      scope: null,
+      depth: 1,
+      reason: "Hand off UI work",
+      status: "ASSIGNED",
+      created_at: "2026-09-21T00:00:00Z",
+    };
+
+    // Test delegateTask
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockRecord,
+    } as Response);
+
+    const delegated = await api.delegateTask("comp-1", "task-1", {
+      target_agent_id: "agent-2",
+      reason: "Hand off UI work",
+    });
+    expect(delegated.id).toBe("del-1");
+    expect(delegated.depth).toBe(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tasks/task-1/delegate",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ target_agent_id: "agent-2", reason: "Hand off UI work" }),
+      })
+    );
+
+    // Test getTaskDelegations
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [mockRecord],
+    } as Response);
+
+    const taskDels = await api.getTaskDelegations("comp-1", "task-1");
+    expect(taskDels).toHaveLength(1);
+    expect(taskDels[0].delegated_to_agent_name).toBe("Lead Frontend Engineer");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tasks/task-1/delegations",
+      expect.objectContaining({ method: "GET" })
+    );
+
+    // Test listCompanyDelegations
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [mockRecord], total: 1 }),
+    } as Response);
+
+    const companyDels = await api.listCompanyDelegations("comp-1", { limit: 10 });
+    expect(companyDels.total).toBe(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/delegations?limit=10",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("delegatePlan performs correct POST request to CEO delegation endpoint", async () => {
+    const mockResult = {
+      project_id: "proj-1",
+      parent_task_id: "task-parent",
+      child_task_ids: ["task-c1", "task-c2"],
+      delegation_ids: ["del-1", "del-2"],
+      plan_id: "plan-1",
+      message: "Plan successfully decomposed and delegated.",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockResult,
+    } as Response);
+
+    const res = await api.delegatePlan("comp-1", "plan-1", { reason: "Execute strategic plan" });
+    expect(res.project_id).toBe("proj-1");
+    expect(res.child_task_ids).toHaveLength(2);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/ceo/plans/plan-1/delegate",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "Execute strategic plan" }),
+      })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

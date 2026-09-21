@@ -13,6 +13,10 @@ from apps.api.schemas.ceo import (
     PlanDetailResponse,
     PlanSummaryResponse,
 )
+from apps.api.schemas.delegation import (
+    PlanDelegateRequest,
+    PlanDelegationResultResponse,
+)
 from domain.ceo.exceptions import (
     CeoAccessDeniedError,
     CeoNotFoundError,
@@ -171,3 +175,35 @@ async def get_plan(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except PlanNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post(
+    "/plans/{plan_id}/delegate",
+    response_model=PlanDelegationResultResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Delegate CEO Plan",
+    description="Decompose a proposed CEO plan into a Project, Parent Task, Child Tasks, and DAG dependencies per docs/Phases.md Section 11.",
+)
+async def delegate_plan(
+    company_id: str,
+    plan_id: str,
+    request: PlanDelegateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[CeoService, Depends(get_ceo_service)],
+) -> PlanDelegationResultResponse:
+    """Delegate a proposed CEO plan into executable projects, tasks, and delegations."""
+    try:
+        result = await service.delegate_plan(
+            user_id=current_user.id,
+            company_id=company_id,
+            plan_id=plan_id,
+            project_id=request.project_id,
+            project_name=request.project_name,
+        )
+        return PlanDelegationResultResponse(**result)
+    except CeoAccessDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except PlanNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

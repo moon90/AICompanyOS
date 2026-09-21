@@ -21,6 +21,7 @@ import {
   Trash2,
   User as UserIcon,
   X,
+  Network,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -31,6 +32,7 @@ import {
   Project,
   Task,
   TaskDependency,
+  DelegationRecord,
 } from "@/lib/api";
 import { ShellLayout } from "@/components/shell/ShellLayout";
 
@@ -94,6 +96,14 @@ export default function TasksPage() {
   // Status update modal state
   const [statusOutputText, setStatusOutputText] = useState("");
   const [statusErrorText, setStatusErrorText] = useState("");
+
+  // Phase 7 Task Delegation State
+  const [taskDelegations, setTaskDelegations] = useState<DelegationRecord[]>([]);
+  const [delegationsLoading, setDelegationsLoading] = useState(false);
+  const [showDelegateForm, setShowDelegateForm] = useState(false);
+  const [delegateTargetAgentId, setDelegateTargetAgentId] = useState("");
+  const [delegateReason, setDelegateReason] = useState("");
+  const [delegateSubmitting, setDelegateSubmitting] = useState(false);
 
   // Load Companies
   useEffect(() => {
@@ -209,6 +219,60 @@ export default function TasksPage() {
       await loadTasks();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to transition status");
+    }
+  }
+
+  // Load Task Delegation Lineage
+  const loadTaskDelegations = useCallback(
+    async (taskId: string) => {
+      if (!activeCompany) return;
+      setDelegationsLoading(true);
+      try {
+        const records = await api.getTaskDelegations(activeCompany.id, taskId);
+        setTaskDelegations(records);
+      } catch {
+        setTaskDelegations([]);
+      } finally {
+        setDelegationsLoading(false);
+      }
+    },
+    [activeCompany]
+  );
+
+  useEffect(() => {
+    if (selectedTask) {
+      loadTaskDelegations(selectedTask.id);
+    } else {
+      setTaskDelegations([]);
+      setShowDelegateForm(false);
+      setDelegateTargetAgentId("");
+      setDelegateReason("");
+    }
+  }, [selectedTask, loadTaskDelegations]);
+
+  // Handle Deterministic Task Delegation (Phase 7)
+  async function handleDelegateTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!activeCompany || !selectedTask || !delegateTargetAgentId) return;
+
+    setDelegateSubmitting(true);
+    setError(null);
+    try {
+      await api.delegateTask(activeCompany.id, selectedTask.id, {
+        target_agent_id: delegateTargetAgentId,
+        reason: delegateReason.trim() || undefined,
+      });
+      const reloaded = await api.getTask(activeCompany.id, selectedTask.id);
+      setSelectedTask(reloaded);
+      await loadTaskDelegations(selectedTask.id);
+      await loadTasks();
+      setShowDelegateForm(false);
+      setDelegateTargetAgentId("");
+      setDelegateReason("");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delegate task");
+    } finally {
+      setDelegateSubmitting(false);
     }
   }
 
@@ -642,10 +706,20 @@ export default function TasksPage() {
                 </div>
 
                 {/* Assigned Specialist Agent */}
-                <div className="space-y-1.5">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                    Assigned Agent & Department
-                  </h4>
+                {/* Assigned Specialist Agent & Phase 7 Delegation Trigger */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Assigned Agent & Department
+                    </h4>
+                    <button
+                      onClick={() => setShowDelegateForm(!showDelegateForm)}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1 font-medium transition-colors"
+                    >
+                      <Network className="h-3.5 w-3.5" />
+                      {showDelegateForm ? "Cancel Delegation" : "Delegate Task"}
+                    </button>
+                  </div>
                   <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800 flex items-center justify-between">
                     {selectedTask.assigned_agent_name ? (
                       <div className="flex items-center gap-3">
@@ -671,6 +745,127 @@ export default function TasksPage() {
                       Registry <ExternalLink className="h-3 w-3" />
                     </Link>
                   </div>
+
+                  {/* Inline Delegation Control Panel (Phase 7) */}
+                  {showDelegateForm && (
+                    <form
+                      onSubmit={handleDelegateTask}
+                      className="p-3.5 bg-zinc-950/90 rounded-lg border border-indigo-500/30 space-y-3 animate-in fade-in"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                          <Network className="h-3.5 w-3.5" />
+                          Hierarchical Delegation
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono">Max Depth: 3</span>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-zinc-400 block mb-1">Target Agent *</label>
+                        <select
+                          required
+                          value={delegateTargetAgentId}
+                          onChange={(e) => setDelegateTargetAgentId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        >
+                          <option value="">Select recipient specialist agent...</option>
+                          {agents
+                            .filter((a) => a.id !== selectedTask.assigned_to_agent_id)
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name} ({a.role} · {a.department?.name || "General"})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-zinc-400 block mb-1">Delegation Directive / Reason</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Assigning domain implementation to technical specialist"
+                          value={delegateReason}
+                          onChange={(e) => setDelegateReason(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowDelegateForm(false)}
+                          className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={delegateSubmitting || !delegateTargetAgentId}
+                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-medium rounded inline-flex items-center gap-1.5"
+                        >
+                          {delegateSubmitting && <Loader2 className="h-3 w-3 animate-spin" />}
+                          Confirm Delegation
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                {/* Delegation Lineage Audit Trail (Phase 7) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                      <Network className="h-4 w-4 text-indigo-400" />
+                      Delegation Lineage ({taskDelegations.length})
+                    </h4>
+                    {taskDelegations.length > 0 && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                        Max Depth: {Math.max(...taskDelegations.map((d) => d.depth))}
+                      </span>
+                    )}
+                  </div>
+
+                  {delegationsLoading ? (
+                    <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800 flex items-center justify-center text-xs text-zinc-500 gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                      Loading lineage...
+                    </div>
+                  ) : taskDelegations.length === 0 ? (
+                    <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-xs text-zinc-500 italic">
+                      No delegation hops recorded. Direct assignment or unassigned.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {taskDelegations.map((rec, idx) => (
+                        <div
+                          key={rec.id}
+                          className="p-3 bg-zinc-950 rounded-lg border border-zinc-800 space-y-1.5 text-xs"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-500/20">
+                                Hop {idx + 1} (Depth {rec.depth})
+                              </span>
+                              <span className="font-medium text-zinc-200">
+                                {rec.delegated_by_agent_name ||
+                                  rec.delegated_by_user_name ||
+                                  (rec.delegated_by_user_id ? "Human Operator" : "System / CEO")}
+                              </span>
+                              <ArrowRight className="h-3 w-3 text-zinc-500" />
+                              <span className="font-medium text-indigo-300">
+                                {rec.delegated_to_agent_name || "Specialist Agent"}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 font-mono">
+                              {new Date(rec.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          {rec.reason && (
+                            <p className="text-zinc-400 text-[11px] bg-zinc-900/60 p-2 rounded border border-zinc-800/80">
+                              <span className="text-zinc-500 font-medium">Directive:</span> {rec.reason}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Objective & Description */}

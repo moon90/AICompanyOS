@@ -10,6 +10,7 @@ from apps.api.routes.agent import router as agent_router
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.ceo import router as ceo_router
 from apps.api.routes.company import router as company_router
+from apps.api.routes.delegation import router as delegation_router
 from apps.api.routes.health import router as health_router
 from apps.api.routes.project import router as project_router
 from apps.api.routes.system import router as system_router
@@ -60,6 +61,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(ceo_router)
     application.include_router(project_router)
     application.include_router(task_router)
+    application.include_router(delegation_router)
 
     return application
 

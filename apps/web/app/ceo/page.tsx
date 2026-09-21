@@ -10,12 +10,14 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  FolderGit2,
   GitBranch,
   History,
   Layers,
   ListTodo,
   Loader2,
   Send,
+  Share2,
   Shield,
   ShieldAlert,
   Sparkles,
@@ -50,6 +52,14 @@ export default function CeoCommandCenterPage() {
   const [loading, setLoading] = useState(true);
   const [planning, setPlanning] = useState(false);
   const [planLoading, setPlanLoading] = useState(false);
+  const [delegating, setDelegating] = useState(false);
+  const [delegationSuccess, setDelegationSuccess] = useState<{
+    project_id: string;
+    project_name: string;
+    parent_task_id: string;
+    child_tasks_count: number;
+    dependencies_count: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Load Companies on Mount
@@ -144,9 +154,33 @@ export default function CeoCommandCenterPage() {
       setConstraintsText("");
       setRequirementsText("");
     } catch (err: any) {
-      setError(err.message || "Failed to synthesize plan");
+      setError(err.message || "Failed to generate structured plan");
     } finally {
       setPlanning(false);
+    }
+  }
+
+  async function handleDelegatePlan() {
+    if (!activeCompany || !selectedPlan) return;
+    setDelegating(true);
+    setError(null);
+    setDelegationSuccess(null);
+    try {
+      const res = await api.delegatePlan(activeCompany.id, selectedPlan.id);
+      setDelegationSuccess({
+        project_id: res.project_id,
+        project_name: res.project_name,
+        parent_task_id: res.parent_task_id,
+        child_tasks_count: res.child_tasks_count,
+        dependencies_count: res.dependencies_count,
+      });
+      await loadPlanDetail(selectedPlan.id, activeCompany.id);
+      const updatedPlans = await api.getPlans(activeCompany.id);
+      setPlans(updatedPlans);
+    } catch (err: any) {
+      setError(err.message || "Failed to delegate plan into work management");
+    } finally {
+      setDelegating(false);
     }
   }
 
@@ -498,10 +532,14 @@ export default function CeoCommandCenterPage() {
 
                 {/* Plan Overview Card */}
                 <div className="p-5 rounded-xl bg-surface-card border border-border space-y-3">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded border ${
+                          selectedPlan.status === "delegated"
+                            ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        }`}>
                           Status: {selectedPlan.status}
                         </span>
                         <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
@@ -512,7 +550,62 @@ export default function CeoCommandCenterPage() {
                         {selectedPlan.goal}
                       </h2>
                     </div>
+
+                    <div>
+                      {selectedPlan.status === "delegated" ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Delegated to Work Management
+                        </span>
+                      ) : (
+                        <button
+                          onClick={handleDelegatePlan}
+                          disabled={delegating}
+                          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-medium shadow-sm transition disabled:opacity-50"
+                        >
+                          {delegating ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              Decomposing & Delegating...
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="w-3.5 h-3.5" />
+                              Delegate & Launch Workflows
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {delegationSuccess && (
+                    <div className="p-3.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 space-y-2">
+                      <div className="flex items-center gap-2 font-medium">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>Plan successfully decomposed and delegated!</span>
+                      </div>
+                      <p className="text-emerald-400/90 text-[11px]">
+                        Created Project &quot;{delegationSuccess.project_name}&quot; with 1 parent task, {delegationSuccess.child_tasks_count} child workstreams, and {delegationSuccess.dependencies_count} prerequisite dependencies.
+                      </p>
+                      <div className="flex items-center gap-3 pt-1">
+                        <Link
+                          href="/projects"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300 hover:text-white underline"
+                        >
+                          <FolderGit2 className="w-3 h-3" />
+                          View in Projects
+                        </Link>
+                        <Link
+                          href="/tasks"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300 hover:text-white underline"
+                        >
+                          <ListTodo className="w-3 h-3" />
+                          View in Tasks Console
+                        </Link>
+                      </div>
+                    </div>
+                  )}
 
                   {selectedPlan.requested_outcome && (
                     <div className="text-xs text-text-secondary bg-surface p-2.5 rounded-lg border border-border">
