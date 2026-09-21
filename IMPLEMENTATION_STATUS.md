@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 7 — Task Assignment & Delegation** (COMPLETE)
+**Phase 8 — Agent Runtime (Agent Execution Engine)** (COMPLETE)
 
 ---
 
@@ -334,20 +334,77 @@
   * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_delegation.py`.
   * Added 2 frontend client unit tests in `apps/web/lib/api.test.ts`.
 
+### Phase 8 — Agent Runtime (Agent Execution Engine) (COMPLETE)
+* **Authoritative Persistence & Database Models (`infrastructure/database/models.py`):**
+  * Implemented `ExecutionRecord` SQLAlchemy model:
+    * Primary key UUID `id`.
+    * Foreign keys with `ON DELETE CASCADE`: `company_id`, `task_id`, `agent_id`.
+    * Optional foreign key `executed_by_user_id` referencing triggering operator.
+    * Status: `RUNNING`, `SUCCESS`, `FAILED`, `TIMED_OUT`.
+    * Metrics: `step_count`, `duration_ms`, `tokens_used`, `estimated_cost` (Float).
+    * Structured reasoning & outputs: `result_summary`, `deliverable` (Text), `steps_json` (JSON), `error_details`.
+    * Timestamps: `created_at`, `completed_at`.
+    * Indexes: `ix_execution_records_company_id`, `ix_execution_records_task_id`, `ix_execution_records_agent_id`, `ix_execution_records_status`.
+    * Added `execution_records` relationships on `Company`, `Task`, and `Agent` models.
+* **Database Migrations:**
+  * Created Alembic migration `0008_create_execution_system.py`.
+  * Verified forward upgrade, complete rollback (`downgrade -1`), and re-upgrade with 0 schema drift (`alembic check`).
+* **Domain Runtime Engine (`domain/runtime/`):**
+  * `schemas.py`: `RuntimeLimits` (`max_steps`, `max_duration_seconds`, `max_tokens`, `max_cost`), `ExecutionStep`, `Deliverable`, `ExecutionResult`, `AgentExecutionContext`.
+  * `exceptions.py`: `ExecutionError`, `ExecutionTimeoutError`, `MaxStepsExceededError`, `AgentInactiveError`, `UnassignedTaskError`, `InvalidTaskStateForExecutionError`, `ExecutionAccessDeniedError`.
+  * `engine.py`: `AgentRuntimeEngine` enforcing asynchronous timeout (`asyncio.wait_for`) and maximum step limits. Decoupled from LLM Gateway via `ExecutionGateway` protocol with lazy import.
+* **LLM Gateway & Specialist Execution Provider:**
+  * `infrastructure/llm/providers/base.py`: Abstract `execute_task(context, limits) -> ExecutionResult`.
+  * `infrastructure/llm/providers/deterministic.py`: Implemented deterministic specialist execution for all 11 foundational agent roles (CTO, Lead Architect, Backend Specialist, Frontend Specialist, QA Specialist, DevOps Specialist, CMO, Content Specialist, Head of Sales, Lead Financial Analyst, Head of Operations) with role-tailored step transcripts and verified deliverables.
+  * `infrastructure/llm/gateway.py`: Added `execute_agent_task(context, limits)`.
+* **Application Services:**
+  * `application/services/execution_service.py`:
+    * Multi-tenant membership verification and tenant isolation.
+    * Validates assigned agent is present and active.
+    * Validates executable task status (`ASSIGNED`, `READY`, `PLANNED`, `FAILED`).
+    * Transitions task to `IN_PROGRESS`.
+    * Persists `ExecutionRecord` in `RUNNING` status.
+    * Assembles `AgentExecutionContext` (agent definition, task, company, prerequisites).
+    * Invokes `AgentRuntimeEngine`.
+    * **Enforces Phase 8 Golden Rule:** An agent claiming "Task completed" does **not** make the task `COMPLETED`; automatically transitions task to `VERIFYING`, records deliverable in `task.output`, and requires operator verification.
+    * On failure: transitions task to `FAILED` with `task.error_details`.
+    * Methods: `execute_task`, `list_task_executions`, `get_execution`.
+  * `application/services/system_service.py`: Updated current phase telemetry to `Phase 8 — Agent Runtime`.
+* **API Layer (`apps/api/`):**
+  * `apps/api/schemas/execution.py`: `TaskExecuteRequest`, `ExecutionRecordResponse`, `ExecutionListResponse`.
+  * `apps/api/routes/execution.py`:
+    * `POST /api/v1/companies/{company_id}/tasks/{task_id}/execute`
+    * `GET /api/v1/companies/{company_id}/tasks/{task_id}/executions`
+    * `GET /api/v1/companies/{company_id}/executions/{execution_id}`
+  * Routers mounted in `apps/api/main.py`.
+* **Frontend Web Application (`apps/web/`):**
+  * `apps/web/lib/api.ts`: Added `ExecutionRecord`, `ExecutionStep`, `ExecutionListResponse`, `TaskExecuteRequest` interfaces and client methods `executeTask`, `getTaskExecutions`, `getExecution`.
+  * Task Console (`apps/web/app/tasks/page.tsx`):
+    * Quick "Run" execution trigger on assigned tasks in task table.
+    * "Phase 8 Verification Guard" alert banner in drawer when task status is `VERIFYING`, providing direct "Verify & Complete Task" action.
+    * "Agent Runtime Engine" control panel in drawer with budget limits (`max_steps`, `max_duration_seconds`) and "Execute Agent" button with spinner.
+    * "Execution Run History" chronological list with status badges, execution metrics (duration, steps, tokens, cost), expandable reasoning step transcripts (thought, action, observation), deliverable code blocks, and error details.
+  * Dashboard (`apps/web/app/page.tsx`): Updated telemetry badges to `Phase 8 Active`.
+* **Testing & Quality Assurance:**
+  * Added 4 unit tests in `tests/unit/test_runtime_engine.py` (success, role deliverables, max steps exceeded, timeout guard).
+  * Added 3 unit tests in `tests/unit/test_execution_service.py` (success lifecycle, validation guards, multi-company access denial).
+  * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_execution.py`.
+  * Added 2 frontend client unit tests in `apps/web/lib/api.test.ts`.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (76 passed in 8.62s) |
+| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (84 passed in 10.94s) |
 | **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (117 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (109 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (20 tests in 2 files in 255ms) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (128 files compliant) |
+| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (120 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (22 tests in 2 files in 275ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0007` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0008` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
 | **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
 
@@ -355,22 +412,24 @@
 
 ## Important Architectural Decisions
 
-1. **Deterministic Hierarchical Delegation Before Autonomous Execution:**
-   Tasks are assigned and delegated down organizational chains (CEO $\to$ Dept Heads $\to$ Specialists) via deterministic rules and stored audit records before autonomous agent execution loops (Phase 8) are introduced.
-2. **First-Class Auditability with `DelegationRecord`:**
-   Every delegation action produces an immutable `DelegationRecord` with hop counter (`depth`), delegator, delegatee, directive/reason, and timestamp.
-3. **Strict Loop & Depth Prevention:**
-   The `DelegationRuleEngine` prevents circular delegation ($A \to B \to A$) and limits delegation chains to a maximum depth of 3 (`max_depth = 3`). Specialists cannot sub-delegate.
-4. **Decomposition of CEO Plans into Projects and DAG Tasks:**
-   Delegating a `CeoPlan` automatically materializes 1 Project, 1 Parent Task, and Child Tasks with `TaskDependency` prerequisites matching the synthesized plan graph, transitioning the plan into `DELEGATED`.
-5. **Runtime Agent Presence Remains 0:**
-   Delegating tasks to registered agents records the organizational assignment, but does not activate runtime execution or background agent presence (Phase 14).
+1. **Phase 8 Golden Rule Enforced in Code:**
+   An agent claiming "Task completed" does **not** automatically make the task `COMPLETED`. The execution service transitions the task to `VERIFYING`, stores the structured deliverable, and waits for operator verification.
+2. **First-Class Execution Audit Trail with `ExecutionRecord`:**
+   Every execution run produces an immutable `ExecutionRecord` containing step-by-step reasoning (`steps_json`), duration, token usage, cost, deliverable, and error details.
+3. **Hard Bounds Guardrails (`AgentRuntimeEngine`):**
+   The engine enforces strict execution boundaries: `asyncio.wait_for` timeout guard (`max_duration_seconds`), step limit guard (`max_steps`), token budgets, and cost ceilings.
+4. **Clean Decoupling via Protocol & Lazy Import:**
+   `domain/runtime/engine.py` defines an `ExecutionGateway` protocol to interact with LLM providers without circular import dependencies on `infrastructure.llm`.
+5. **Role-Specific Specialist Outputs:**
+   Specialist agents (Frontend, Backend, QA, DevOps, Architects, Analysts) produce structured deliverables in appropriate formats (TypeScript, Python, Markdown, YAML) matching their functional domain.
+6. **Runtime Active Presence Remains 0:**
+   Executing tasks via the runtime engine runs bounded synchronous executions; persistent background agent loops and active socket presence remain strictly reserved for Phase 14.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 8 — Agent Execution Engine**
+**Phase 9 — Tool Integration & Agent Capabilities**
 *(Awaiting user authorization before proceeding).*
 
 

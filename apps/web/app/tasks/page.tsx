@@ -22,6 +22,12 @@ import {
   User as UserIcon,
   X,
   Network,
+  Play,
+  Zap,
+  ChevronDown,
+  ChevronRight,
+  Cpu,
+  FileCode,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -33,6 +39,8 @@ import {
   Task,
   TaskDependency,
   DelegationRecord,
+  ExecutionRecord,
+  TaskExecuteRequest,
 } from "@/lib/api";
 import { ShellLayout } from "@/components/shell/ShellLayout";
 
@@ -104,6 +112,15 @@ export default function TasksPage() {
   const [delegateTargetAgentId, setDelegateTargetAgentId] = useState("");
   const [delegateReason, setDelegateReason] = useState("");
   const [delegateSubmitting, setDelegateSubmitting] = useState(false);
+
+  // Phase 8 Agent Runtime Execution State
+  const [taskExecutions, setTaskExecutions] = useState<ExecutionRecord[]>([]);
+  const [executionsLoading, setExecutionsLoading] = useState(false);
+  const [executingTaskId, setExecutingTaskId] = useState<string | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [expandedExecutionId, setExpandedExecutionId] = useState<string | null>(null);
+  const [maxStepsInput, setMaxStepsInput] = useState<number>(5);
+  const [maxDurationInput, setMaxDurationInput] = useState<number>(60);
 
   // Load Companies
   useEffect(() => {
@@ -239,16 +256,77 @@ export default function TasksPage() {
     [activeCompany]
   );
 
+  // Load Agent Execution Runs (Phase 8)
+  const loadTaskExecutions = useCallback(
+    async (taskId: string) => {
+      if (!activeCompany) return;
+      setExecutionsLoading(true);
+      try {
+        const res = await api.getTaskExecutions(activeCompany.id, taskId);
+        setTaskExecutions(res.items);
+        if (res.items.length > 0) {
+          setExpandedExecutionId((prev) => prev || res.items[0].id);
+        }
+      } catch {
+        setTaskExecutions([]);
+      } finally {
+        setExecutionsLoading(false);
+      }
+    },
+    [activeCompany]
+  );
+
   useEffect(() => {
     if (selectedTask) {
       loadTaskDelegations(selectedTask.id);
+      loadTaskExecutions(selectedTask.id);
     } else {
       setTaskDelegations([]);
+      setTaskExecutions([]);
+      setExpandedExecutionId(null);
+      setExecutionError(null);
       setShowDelegateForm(false);
       setDelegateTargetAgentId("");
       setDelegateReason("");
     }
-  }, [selectedTask, loadTaskDelegations]);
+  }, [selectedTask, loadTaskDelegations, loadTaskExecutions]);
+
+  // Handle Agent Runtime Execution (Phase 8)
+  async function handleExecuteTask(taskId: string, customLimits?: TaskExecuteRequest) {
+    if (!activeCompany) return;
+    setExecutingTaskId(taskId);
+    setExecutionError(null);
+    try {
+      const limits: TaskExecuteRequest = customLimits || {
+        max_steps: maxStepsInput || 5,
+        max_duration_seconds: maxDurationInput || 60,
+      };
+      await api.executeTask(activeCompany.id, taskId, limits);
+      const reloaded = await api.getTask(activeCompany.id, taskId);
+      setSelectedTask(reloaded);
+      await loadTaskExecutions(taskId);
+      await loadTasks();
+    } catch (err: unknown) {
+      setExecutionError(err instanceof Error ? err.message : "Agent execution failed");
+    } finally {
+      setExecutingTaskId(null);
+    }
+  }
+
+  // Handle Operator Verification & Completion (Phase 8 Golden Rule)
+  async function handleVerifyAndComplete(taskId: string) {
+    if (!activeCompany) return;
+    try {
+      const updated = await api.updateTaskStatus(activeCompany.id, taskId, {
+        status: "COMPLETED",
+        output: selectedTask?.output || "Deliverable verified and accepted by operator.",
+      });
+      setSelectedTask(updated);
+      await loadTasks();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to verify and complete task");
+    }
+  }
 
   // Handle Deterministic Task Delegation (Phase 7)
   async function handleDelegateTask(e: React.FormEvent) {
@@ -484,7 +562,8 @@ export default function TasksPage() {
                     <th className="py-3 px-4">Project</th>
                     <th className="py-3 px-4">Assigned Specialist</th>
                     <th className="py-3 px-4">Prerequisites</th>
-                    <th className="py-3 px-4 text-right">Created</th>
+                    <th className="py-3 px-4">Created</th>
+                    <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
@@ -578,8 +657,50 @@ export default function TasksPage() {
                         </td>
 
                         {/* Created Date */}
-                        <td className="py-3.5 px-4 text-right text-xs text-zinc-500">
+                        <td className="py-3.5 px-4 text-xs text-zinc-500">
                           {new Date(task.created_at).toLocaleDateString()}
+                        </td>
+
+                        {/* Quick Actions (Phase 8 Execution & Verification) */}
+                        <td className="py-3.5 px-4 text-right">
+                          {task.status === "VERIFYING" ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTask(task);
+                              }}
+                              className="px-2.5 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/30 text-xs font-semibold rounded inline-flex items-center gap-1.5 transition-all"
+                            >
+                              <CheckCircle2 className="h-3 w-3 text-yellow-400" />
+                              Verify
+                            </button>
+                          ) : task.assigned_to_agent_id && ["ASSIGNED", "READY", "FAILED"].includes(task.status) ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExecuteTask(task.id);
+                              }}
+                              disabled={executingTaskId === task.id}
+                              className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 disabled:opacity-50 text-indigo-300 border border-indigo-500/30 text-xs font-medium rounded inline-flex items-center gap-1.5 transition-all"
+                            >
+                              {executingTaskId === task.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin text-indigo-400" />
+                              ) : (
+                                <Zap className="h-3 w-3 text-indigo-400" />
+                              )}
+                              Run
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTask(task);
+                              }}
+                              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                            >
+                              Details →
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -671,6 +792,32 @@ export default function TasksPage() {
                     })}
                   </div>
                 </div>
+
+                {/* Phase 8 Verification Banner (Golden Rule: Agent completion advances to VERIFYING, operator review required) */}
+                {selectedTask.status === "VERIFYING" && (
+                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl space-y-3 animate-in fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <Clock className="h-5 w-5 text-yellow-400 animate-pulse shrink-0" />
+                        <div>
+                          <span className="text-xs font-bold text-yellow-300 uppercase tracking-wider block">
+                            Phase 8 Verification Guard
+                          </span>
+                          <span className="text-xs text-yellow-200/80 block">
+                            Agent completed execution. Review the output deliverable below and confirm completion.
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleVerifyAndComplete(selectedTask.id)}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm inline-flex items-center gap-2 shrink-0 transition-colors"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Verify & Complete Task
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Status Transition Action Bar */}
                 <div className="p-4 bg-zinc-800/40 rounded-xl border border-zinc-800 space-y-3">
@@ -861,6 +1008,237 @@ export default function TasksPage() {
                             <p className="text-zinc-400 text-[11px] bg-zinc-900/60 p-2 rounded border border-zinc-800/80">
                               <span className="text-zinc-500 font-medium">Directive:</span> {rec.reason}
                             </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Phase 8 Agent Runtime Execution Engine */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                      <Cpu className="h-4 w-4 text-indigo-400" />
+                      Agent Runtime Engine (Execution Bounds)
+                    </h4>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      Phase 8 Active
+                    </span>
+                  </div>
+
+                  {selectedTask.assigned_to_agent_id ? (
+                    <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold text-zinc-200 block">
+                            Run Specialist Agent: {selectedTask.assigned_agent_name}
+                          </span>
+                          <span className="text-[11px] text-zinc-500">
+                            Bounded reasoning loop with automatic deliverable capture & verification guard
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleExecuteTask(selectedTask.id)}
+                          disabled={
+                            executingTaskId === selectedTask.id ||
+                            !["ASSIGNED", "READY", "PLANNED", "FAILED"].includes(selectedTask.status)
+                          }
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white rounded-lg inline-flex items-center gap-2 shadow-sm transition-all"
+                        >
+                          {executingTaskId === selectedTask.id ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Running Agent...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="h-3.5 w-3.5 text-indigo-200" />
+                              Execute Agent
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-800/80">
+                        <div>
+                          <label className="text-[11px] text-zinc-400 block mb-1">
+                            Max Steps (Budget Limit)
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={maxStepsInput}
+                            onChange={(e) => setMaxStepsInput(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-zinc-400 block mb-1">
+                            Timeout Guard (Seconds)
+                          </label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={300}
+                            value={maxDurationInput}
+                            onChange={(e) => setMaxDurationInput(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      {executionError && (
+                        <div className="p-2.5 bg-rose-950/40 border border-rose-500/30 rounded text-xs text-rose-300 flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                          <span>{executionError}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-xs text-zinc-500 italic">
+                      Assign a specialist agent to this task before running the execution engine.
+                    </div>
+                  )}
+                </div>
+
+                {/* Execution Run History (Phase 8 Audit Trail) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                      <Cpu className="h-4 w-4 text-indigo-400" />
+                      Execution Run History ({taskExecutions.length})
+                    </h4>
+                    {taskExecutions.length > 0 && (
+                      <span className="text-[10px] font-mono text-zinc-400">
+                        Latest: {new Date(taskExecutions[0].created_at).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
+
+                  {executionsLoading ? (
+                    <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 flex items-center justify-center text-xs text-zinc-500 gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                      Loading execution history...
+                    </div>
+                  ) : taskExecutions.length === 0 ? (
+                    <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-xs text-zinc-500 italic">
+                      No execution runs recorded yet. Click &quot;Execute Agent&quot; above to launch bounded reasoning.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {taskExecutions.map((run) => (
+                        <div
+                          key={run.id}
+                          className="p-3.5 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  run.status === "SUCCESS"
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                    : run.status === "FAILED"
+                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                    : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                }`}
+                              >
+                                {run.status}
+                              </span>
+                              <span className="text-xs font-medium text-zinc-200">
+                                {run.agent_name || "Specialist Agent"}
+                              </span>
+                              <span className="text-[11px] text-zinc-500 font-mono">
+                                ({run.duration_ms}ms · {run.step_count} steps · {run.tokens_used} tokens · $
+                                {run.estimated_cost.toFixed(4)})
+                              </span>
+                            </div>
+                            <button
+                              onClick={() =>
+                                setExpandedExecutionId(
+                                  expandedExecutionId === run.id ? null : run.id
+                                )
+                              }
+                              className="text-xs text-zinc-400 hover:text-indigo-400 inline-flex items-center gap-1 font-medium transition-colors"
+                            >
+                              {expandedExecutionId === run.id ? "Hide Details" : "View Steps & Output"}
+                              {expandedExecutionId === run.id ? (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+
+                          {run.result_summary && (
+                            <p className="text-xs text-zinc-300 bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                              {run.result_summary}
+                            </p>
+                          )}
+
+                          {expandedExecutionId === run.id && (
+                            <div className="space-y-3 pt-2 border-t border-zinc-800/80">
+                              {/* Step Transcript */}
+                              {run.steps_json && run.steps_json.length > 0 && (
+                                <div className="space-y-1.5">
+                                  <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
+                                    Reasoning Step Transcript ({run.steps_json.length} steps)
+                                  </span>
+                                  <div className="space-y-2">
+                                    {run.steps_json.map((step) => (
+                                      <div
+                                        key={step.step_number}
+                                        className="p-2.5 bg-zinc-900/80 rounded-lg border border-zinc-800 text-xs space-y-1 font-mono"
+                                      >
+                                        <div className="flex items-center justify-between text-[11px] text-indigo-400 font-bold">
+                                          <span>
+                                            Step {step.step_number}: {step.action}
+                                          </span>
+                                          <span className="text-zinc-500 font-normal">
+                                            {step.duration_ms}ms · {step.tokens_used} tokens
+                                          </span>
+                                        </div>
+                                        <p className="text-zinc-300 font-sans text-xs">
+                                          <span className="text-zinc-500 font-medium">Thought:</span>{" "}
+                                          {step.thought}
+                                        </p>
+                                        {step.observation && (
+                                          <p className="text-zinc-400 font-sans text-xs bg-zinc-950 p-1.5 rounded">
+                                            <span className="text-zinc-500 font-medium">Observation:</span>{" "}
+                                            {step.observation}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Deliverable preview */}
+                              {run.deliverable && (
+                                <div className="space-y-1.5">
+                                  <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider block flex items-center gap-1.5">
+                                    <FileCode className="h-3.5 w-3.5" />
+                                    Run Deliverable
+                                  </span>
+                                  <pre className="text-xs text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-emerald-500/20 font-mono overflow-x-auto whitespace-pre-wrap max-h-64">
+                                    {run.deliverable}
+                                  </pre>
+                                </div>
+                              )}
+
+                              {run.error_details && (
+                                <div className="space-y-1.5">
+                                  <span className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider block">
+                                    Execution Error Details
+                                  </span>
+                                  <pre className="text-xs text-rose-300 bg-rose-950/20 p-2.5 rounded-lg border border-rose-500/20 font-mono overflow-x-auto whitespace-pre-wrap">
+                                    {run.error_details}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       ))}

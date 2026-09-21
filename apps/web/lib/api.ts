@@ -318,6 +318,49 @@ export interface DelegationRecord {
   delegated_by_user_name: string | null;
 }
 
+export interface ExecutionStep {
+  step_number: number;
+  thought: string;
+  action: string;
+  action_input: Record<string, unknown>;
+  observation: string;
+  duration_ms: number;
+  tokens_used: number;
+}
+
+export interface ExecutionRecord {
+  id: string;
+  company_id: string;
+  task_id: string;
+  agent_id: string;
+  executed_by_user_id: string | null;
+  status: string;
+  step_count: number;
+  duration_ms: number;
+  tokens_used: number;
+  estimated_cost: number;
+  result_summary: string | null;
+  deliverable: string | null;
+  steps_json: ExecutionStep[];
+  error_details: string | null;
+  created_at: string;
+  completed_at: string | null;
+  agent_name?: string | null;
+  agent_role?: string | null;
+}
+
+export interface ExecutionListResponse {
+  total: number;
+  items: ExecutionRecord[];
+}
+
+export interface TaskExecuteRequest {
+  max_steps?: number;
+  max_duration_seconds?: number;
+  max_tokens?: number;
+  max_cost?: number;
+}
+
 export interface DelegationListResponse {
   items: DelegationRecord[];
   total: number;
@@ -920,6 +963,44 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(data || {}),
+      }
+    );
+  },
+
+  async executeTask(
+    companyId: string,
+    taskId: string,
+    data?: TaskExecuteRequest
+  ): Promise<ExecutionRecord> {
+    return request<ExecutionRecord>(
+      `/api/v1/companies/${companyId}/tasks/${taskId}/execute`,
+      {
+        method: "POST",
+        body: JSON.stringify(data || {}),
+      }
+    );
+  },
+
+  async getTaskExecutions(
+    companyId: string,
+    taskId: string
+  ): Promise<ExecutionListResponse> {
+    return request<ExecutionListResponse>(
+      `/api/v1/companies/${companyId}/tasks/${taskId}/executions`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async getExecution(
+    companyId: string,
+    executionId: string
+  ): Promise<ExecutionRecord> {
+    return request<ExecutionRecord>(
+      `/api/v1/companies/${companyId}/executions/${executionId}`,
+      {
+        method: "GET",
       }
     );
   },

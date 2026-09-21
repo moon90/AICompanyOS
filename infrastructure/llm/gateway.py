@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from domain.runtime.schemas import AgentExecutionContext, ExecutionResult, RuntimeLimits
 from infrastructure.llm.providers.base import BaseLLMProvider
 from infrastructure.llm.providers.deterministic import DeterministicPlannerProvider
 from orchestration.planner.dag_validator import validate_plan_dag
@@ -40,3 +41,19 @@ class LLMGateway:
         )
 
         return raw_plan
+
+    async def execute_agent_task(
+        self,
+        context: AgentExecutionContext,
+        limits: RuntimeLimits,
+    ) -> ExecutionResult:
+        """Execute a specialist agent task using the active provider.
+
+        Args:
+            context: Full agent execution context.
+            limits: Runtime limits and constraints.
+
+        Returns:
+            ExecutionResult with structured deliverable, steps, metrics, and verification notes.
+        """
+        return await self.provider.execute_task(context, limits)

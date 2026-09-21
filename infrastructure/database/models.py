@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -201,6 +202,11 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    execution_records: Mapped[list["ExecutionRecord"]] = relationship(
+        "ExecutionRecord",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -379,6 +385,11 @@ class Agent(Base):
         back_populates="agent",
         cascade="all, delete-orphan",
         order_by=lambda: desc(AgentDefinition.created_at),
+    )
+    execution_records: Mapped[list["ExecutionRecord"]] = relationship(
+        "ExecutionRecord",
+        back_populates="agent",
+        cascade="all, delete-orphan",
     )
 
 
@@ -768,6 +779,12 @@ class Task(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
+    execution_records: Mapped[list["ExecutionRecord"]] = relationship(
+        "ExecutionRecord",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by=lambda: desc(ExecutionRecord.created_at),
+    )
 
 
 class TaskDependency(Base):
@@ -909,4 +926,95 @@ Index(
     "ix_delegation_records_company_created",
     DelegationRecord.company_id,
     DelegationRecord.created_at,
+)
+
+
+class ExecutionRecord(Base):
+    """Authoritative audit record of an agent task execution run adhering to docs/Phases.md Section 12."""
+
+    __tablename__ = "execution_records"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    executed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="RUNNING",
+        server_default="RUNNING",
+    )
+    step_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    estimated_cost: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, server_default="0.0"
+    )
+    result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deliverable: Mapped[str | None] = mapped_column(Text, nullable=True)
+    steps_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    error_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="execution_records")
+    task: Mapped["Task"] = relationship("Task", back_populates="execution_records")
+    agent: Mapped["Agent"] = relationship("Agent", back_populates="execution_records")
+    executed_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[executed_by_user_id]
+    )
+
+
+Index(
+    "ix_execution_records_company_task",
+    ExecutionRecord.company_id,
+    ExecutionRecord.task_id,
+)
+Index(
+    "ix_execution_records_company_agent",
+    ExecutionRecord.company_id,
+    ExecutionRecord.agent_id,
+)
+Index(
+    "ix_execution_records_company_created",
+    ExecutionRecord.company_id,
+    ExecutionRecord.created_at,
 )

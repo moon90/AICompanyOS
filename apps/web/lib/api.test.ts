@@ -712,6 +712,95 @@ describe("Web API Client", () => {
     );
   });
 
+  it("executeTask performs POST request to execute endpoint", async () => {
+    const mockExecution = {
+      id: "exec-123",
+      company_id: "comp-1",
+      task_id: "task-1",
+      agent_id: "agent-1",
+      executed_by_user_id: "user-1",
+      status: "SUCCESS",
+      step_count: 4,
+      duration_ms: 250,
+      tokens_used: 1200,
+      estimated_cost: 0.0024,
+      result_summary: "Task executed successfully",
+      deliverable: "export function Test() {}",
+      steps_json: [
+        {
+          step_number: 1,
+          thought: "Analyze requirements",
+          action: "analyze",
+          action_input: {},
+          observation: "Complete",
+          duration_ms: 50,
+          tokens_used: 300,
+        },
+      ],
+      error_details: null,
+      created_at: "2026-09-21T00:00:00Z",
+      completed_at: "2026-09-21T00:00:01Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockExecution,
+    } as Response);
+
+    const res = await api.executeTask("comp-1", "task-1", { max_steps: 5, max_duration_seconds: 60 });
+    expect(res.id).toBe("exec-123");
+    expect(res.status).toBe("SUCCESS");
+    expect(res.step_count).toBe(4);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tasks/task-1/execute",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ max_steps: 5, max_duration_seconds: 60 }),
+      })
+    );
+  });
+
+  it("getTaskExecutions fetches execution runs list", async () => {
+    const mockList = {
+      total: 1,
+      items: [
+        {
+          id: "exec-123",
+          company_id: "comp-1",
+          task_id: "task-1",
+          agent_id: "agent-1",
+          executed_by_user_id: "user-1",
+          status: "SUCCESS",
+          step_count: 4,
+          duration_ms: 250,
+          tokens_used: 1200,
+          estimated_cost: 0.0024,
+          result_summary: "Task executed successfully",
+          deliverable: "Deliverable text",
+          steps_json: [],
+          error_details: null,
+          created_at: "2026-09-21T00:00:00Z",
+          completed_at: "2026-09-21T00:00:01Z",
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockList,
+    } as Response);
+
+    const res = await api.getTaskExecutions("comp-1", "task-1");
+    expect(res.total).toBe(1);
+    expect(res.items[0].id).toBe("exec-123");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tasks/task-1/executions",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -726,3 +815,4 @@ describe("Web API Client", () => {
     });
   });
 });
+
