@@ -4,7 +4,9 @@ import React, { useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Bot,
+  Building2,
   CheckCircle2,
   CheckSquare,
   Database,
@@ -15,24 +17,40 @@ import {
   ShieldAlert,
   Users,
 } from "lucide-react";
-import { api, SystemStatus, User } from "@/lib/api";
+import Link from "next/link";
+import { api, Company, SystemStatus, User } from "@/lib/api";
 import { ShellLayout } from "@/components/shell/ShellLayout";
 
 export default function DashboardPage() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeCompany, setActiveCompany] = useState<Company | null>(null);
+  const [departmentCount, setDepartmentCount] = useState<number>(0);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
   async function loadTelemetry() {
     setStatusLoading(true);
     try {
-      const [user, status] = await Promise.all([
+      const [user, status, companies] = await Promise.all([
         api.getMe(),
         api.getSystemStatus(),
+        api.getCompanies().catch(() => [] as Company[]),
       ]);
       setCurrentUser(user);
       setSystemStatus(status);
+      const primaryCompany = companies[0] || null;
+      setActiveCompany(primaryCompany);
+      if (primaryCompany) {
+        try {
+          const depts = await api.getDepartments(primaryCompany.id);
+          setDepartmentCount(depts.length);
+        } catch {
+          setDepartmentCount(0);
+        }
+      } else {
+        setDepartmentCount(0);
+      }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
       // Telemetry will fall back gracefully
@@ -104,16 +122,21 @@ export default function DashboardPage() {
         {/* Executive Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#1e2738]">
           <div>
-            <div className="flex items-center gap-3 mb-1">
+            <div className="flex flex-wrap items-center gap-3 mb-1">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                Executive Dashboard
+                {activeCompany ? activeCompany.name : "Executive Dashboard"}
               </h1>
               <span className="text-xs font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                Phase 2 Foundation
+                Phase 3 Active
               </span>
+              {activeCompany?.industry && (
+                <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  {activeCompany.industry}
+                </span>
+              )}
             </div>
             <p className="text-xs sm:text-sm text-slate-400">
-              Real-time operating picture of company systems, foundation, and agent readiness.
+              {activeCompany?.mission || activeCompany?.description || "Real-time operating picture of company systems, foundation, and agent readiness."}
             </p>
           </div>
 
@@ -134,6 +157,30 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Company Provisioning Notice if No Company Exists */}
+        {!statusLoading && !activeCompany && (
+          <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-white">No Company Provisioned</h4>
+                <p className="text-xs text-slate-400">
+                  Establish your company identity and organizational departments to activate company-scoped operations.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/company"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition"
+            >
+              <span>Setup Company</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
 
         {/* Metric Cards Row per docs/Phases.md § 6 & docs/UI.md § 27 */}
         <div>
@@ -320,18 +367,18 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            {/* Roadmap Status */}
+            {/* Roadmap & Organization Status */}
             <div className="p-4 rounded-lg bg-[#0c1017] border border-[#1e2738]">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-slate-400 font-medium">Roadmap State</span>
-                <CheckSquare className="w-4 h-4 text-purple-400" />
+                <span className="text-xs text-slate-400 font-medium">Organization State</span>
+                <Building2 className="w-4 h-4 text-purple-400" />
               </div>
               <div className="text-sm font-semibold text-white mb-1 flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Phase 2 Shell</span>
+                <span className="truncate">{activeCompany ? activeCompany.name : "Unassigned"}</span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
-                Next: Phase 3 (Company)
+                {activeCompany ? `${departmentCount} Departments Active` : "Phase 3 Ready"}
               </p>
             </div>
           </div>

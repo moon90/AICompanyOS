@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 2 — Application Shell & Dashboard** (COMPLETE)
+**Phase 3 — Company & Organization** (COMPLETE)
 
 ---
 
@@ -93,45 +93,102 @@
   * Configured Vitest in `apps/web/vitest.config.mts` with happy-dom environment.
   * Added frontend unit tests in `apps/web/lib/api.test.ts` and `apps/web/components/shell/shell.test.ts`.
 
+### Phase 3 — Company & Organization (COMPLETE)
+* **Authoritative Persistence & Models (`infrastructure/database/models.py`):**
+  * `Company`: Primary entity with UUID pk, `name`, `description`, `mission`, `industry`, `status` (active/archived), `created_at`, `updated_at`.
+  * `CompanyMember`: Explicit membership linking users to companies with `role` (`owner`, `admin`, `member`), `created_at`, `updated_at`, and `UniqueConstraint("company_id", "user_id")`. Avoids "user = company owner" conflation.
+  * `Department`: Company-scoped organizational unit with UUID pk, `company_id`, `name`, `code`, `description`, `lead_role`, `status`, and `UniqueConstraint("company_id", "code")`.
+  * Proper foreign key cascading (`CASCADE`), timestamps, and B-tree indexes (`ix_companies_status`, `ix_company_members_user_id`, `ix_departments_company_id`).
+* **Database Migrations:**
+  * Created and verified Alembic migration `0003_create_companies_and_org.py`.
+  * Preserved existing migrations `0001` and `0002`.
+  * Validated upgrade to head, downgrade, and re-upgrade with 0 schema drift (`alembic check`).
+* **Domain Layer (`domain/company/exceptions.py`):**
+  * Defined typed domain exceptions: `CompanyNotFoundError`, `CompanyAccessDeniedError`, `DepartmentNotFoundError`, `DepartmentAlreadyExistsError`, `InvalidCompanyDataError`.
+* **Multi-Company Data Isolation & Application Services (`application/services/company_service.py`):**
+  * Built `CompanyService` enforcing company isolation at the database query level (never relying on frontend filtering).
+  * Auto-provisions the 5 foundational departments per `docs/Phases.md` § 7 upon company creation:
+    * CTO (Technology & Engineering)
+    * CMO (Marketing & Growth)
+    * Sales (Sales & Revenue)
+    * Finance (Finance & Accounting)
+    * Operations (Business Operations & Legal)
+  * Implemented methods: `create_company`, `get_user_companies`, `get_company`, `update_company`, `get_departments`, `create_department`, `update_department`, `get_company_members`.
+  * Strictly verifies `CompanyMember.user_id == current_user.id` on every company-scoped operation.
+* **API Layer (`apps/api/schemas/company.py`, `apps/api/routes/company.py`):**
+  * Pydantic schemas validating inputs and providing explicit response contracts.
+  * Thin route handlers mounted under `/api/v1/companies`:
+    * `GET /api/v1/companies` (200 OK — list authenticated user's companies)
+    * `POST /api/v1/companies` (201 Created — establish new company with default departments)
+    * `GET /api/v1/companies/{company_id}` (200 OK — company profile)
+    * `PATCH /api/v1/companies/{company_id}` (200 OK — update company profile, owner/admin only)
+    * `GET /api/v1/companies/{company_id}/departments` (200 OK — list departments)
+    * `POST /api/v1/companies/{company_id}/departments` (201 Created — create department)
+    * `PATCH /api/v1/companies/{company_id}/departments/{department_id}` (200 OK — update department)
+    * `GET /api/v1/companies/{company_id}/members` (200 OK — list members)
+* **Frontend Company Management UI (`apps/web/app/company/page.tsx`):**
+  * Replaced `PhaseBoundaryCard` placeholder with real authenticated company workspace.
+  * Initial State: Clean creation wizard if no company exists.
+  * Active State: Multi-tab executive console:
+    * **Overview & Mission:** Company profile, industry, mission statement, status, core metadata.
+    * **Departments:** Grid of all departments with codes, names, leadership roles, and "Add Department" drawer modal.
+    * **Organizational Structure:** Visual hierarchy (`Founder/Executive Leadership -> Phase 5 CEO Orchestrator -> Phase 4 Department Heads`). No fake agents or runtime entities.
+    * **Members & Governance:** Real member roster from PostgreSQL with role badges and company isolation boundaries.
+    * **Settings:** Edit company name, mission, description, and industry with live updates.
+* **Dashboard Integration (`apps/web/app/page.tsx`):**
+  * Real-time executive header reflects the authenticated user's active company name, industry, and mission.
+  * System telemetry panel displays "Organization State" with authoritative company name and active department count.
+  * If unprovisioned, displays an executive prompt directing the user to `/company`.
+  * Maintained honest metric cards (0 active agents, 0 projects, 0 tasks) with zero simulated operational numbers.
+* **Frontend Client & Testing:**
+  * Added company, department, and member methods to `apps/web/lib/api.ts`.
+  * Added frontend unit tests for all company endpoints in `apps/web/lib/api.test.ts`.
+* **Testing & Quality Assurance:**
+  * Added 7 unit tests in `tests/unit/test_company_service.py` covering isolation, creation, duplicates, updates, and validations.
+  * Added comprehensive lifecycle & multi-company isolation integration test in `tests/integration/test_api_company.py`.
+  * Verified 22/22 backend tests passing, 8/8 frontend tests passing, 100% type safety in strict mode.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (14 passed in 2.97s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (59 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (51 files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web run test` | **PASSED** (5 tests in 2 files) |
+| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (22 passed in 3.84s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (67 files compliant) |
+| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (59 files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web run test` | **PASSED** (8 tests in 2 files) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001` & `0002` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`, `0002`, `0003` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
-| **Authentication Regression** | Automated test suite + edge middleware | **PASSED** (Session validation, logout revocation, route redirect) |
+| **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **Honest Empty States Over Fabricated Data:**
-   Per prompt and `docs/Rules.md` § 2.3, no mock companies, agents, tasks, or metrics were introduced to make the UI look populated. Metric cards honestly display `0` with explicit phase annotations, and operational panels clearly explain roadmap milestones.
-2. **Authoritative State vs Future States:**
-   The application shell strictly separates verified session identity (`User` from PostgreSQL `user_sessions`) from upcoming organizational (Phase 3), agent (Phase 4), and task (Phase 6) models.
-3. **Decoupled Backend Telemetry:**
-   System readiness reporting is powered by `SystemService`, keeping database verification queries completely isolated from route handlers per `docs/Rules.md` § 8.
-4. **Responsive Executive Layout:**
-   Desktop screens utilize a fixed 288px sidebar with high information density, while mobile and tablet screens feature an accessible slide-out navigation drawer toggled via the top bar.
+1. **Explicit Membership Model vs Owner Conflation:**
+   Users and companies are connected via `CompanyMember` association records with roles (`owner`, `admin`, `member`). This ensures the system does not assume `user == company owner` and lays the foundation for role-based governance.
+2. **Backend-Enforced Company Isolation:**
+   Multi-company isolation is enforced at the database query level: all company-scoped queries filter by `company_id` and explicitly verify membership (`CompanyMember.user_id == current_user.id`). Frontend filters are never trusted for isolation.
+3. **Department vs Agent Boundary:**
+   Per `docs/Phases.md`, a department is a business organizational entity, whereas an agent is an execution entity. No mock agent records were created in Phase 3; departments only reference leadership roles (e.g., `CTO`, `CMO`), and Agent Registry remains strictly scoped to Phase 4.
+4. **Authoritative Department Provisioning:**
+   When establishing a new company, `CompanyService` automatically provisions the 5 required default departments (`CTO`, `CMO`, `Sales`, `Finance`, `Operations`), providing immediate organizational structure without manual boilerplating.
+5. **Honest Metric Integrity:**
+   The Executive Dashboard integrates real company data (name, mission, department count) while preserving honest zero states for unreached phases (agents in Phase 4, projects/tasks in Phase 6).
 
 ---
 
 ## Known Risks & Issues
 
-* **Distributed Telemetry:** The current `SystemService` checks the primary PostgreSQL database connection. In Phase 24 (Observability & Cost), this service should be extended to probe Redis caching queues and background task runners.
+* **Distributed Multi-Tenancy:** In future phases with high-concurrency background workers (e.g. Phase 5 CEO Orchestrator), company context must be explicitly passed through task payloads or async contextvars to prevent cross-company data leakage during async job processing.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 3 — Company & Organization**
+**Phase 4 — Agent Registry**
 *(Awaiting user authorization before proceeding).*

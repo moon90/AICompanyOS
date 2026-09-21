@@ -27,6 +27,41 @@ export interface SystemStatus {
   timestamp: string;
 }
 
+export interface Company {
+  id: string;
+  name: string;
+  description: string | null;
+  mission: string | null;
+  industry: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  user_role: string | null;
+}
+
+export interface Department {
+  id: string;
+  company_id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  lead_role: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyMember {
+  id: string;
+  company_id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  role: string;
+  status: string;
+  created_at: string;
+}
+
 export interface ApiError {
   detail: string;
   status: number;
@@ -108,6 +143,92 @@ export const api = {
 
   async getSystemStatus(): Promise<SystemStatus> {
     return request<SystemStatus>("/api/v1/system/status", {
+      method: "GET",
+    });
+  },
+
+  async getCompanies(): Promise<Company[]> {
+    return request<Company[]>("/api/v1/companies", {
+      method: "GET",
+    });
+  },
+
+  async getCompany(companyId: string): Promise<Company> {
+    return request<Company>(`/api/v1/companies/${companyId}`, {
+      method: "GET",
+    });
+  },
+
+  async createCompany(data: {
+    name: string;
+    description?: string;
+    mission?: string;
+    industry?: string;
+  }): Promise<Company> {
+    return request<Company>("/api/v1/companies", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateCompany(
+    companyId: string,
+    data: {
+      name?: string;
+      description?: string;
+      mission?: string;
+      industry?: string;
+      status?: string;
+    }
+  ): Promise<Company> {
+    return request<Company>(`/api/v1/companies/${companyId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getDepartments(companyId: string): Promise<Department[]> {
+    return request<Department[]>(`/api/v1/companies/${companyId}/departments`, {
+      method: "GET",
+    });
+  },
+
+  async createDepartment(
+    companyId: string,
+    data: {
+      name: string;
+      code: string;
+      description?: string;
+      lead_role?: string;
+    }
+  ): Promise<Department> {
+    return request<Department>(`/api/v1/companies/${companyId}/departments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateDepartment(
+    companyId: string,
+    departmentId: string,
+    data: {
+      name?: string;
+      description?: string;
+      lead_role?: string;
+      status?: string;
+    }
+  ): Promise<Department> {
+    return request<Department>(
+      `/api/v1/companies/${companyId}/departments/${departmentId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async getCompanyMembers(companyId: string): Promise<CompanyMember[]> {
+    return request<CompanyMember[]>(`/api/v1/companies/${companyId}/members`, {
       method: "GET",
     });
   },
