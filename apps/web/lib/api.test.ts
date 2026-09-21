@@ -801,6 +801,120 @@ describe("Web API Client", () => {
     );
   });
 
+  it("getTools returns tool definitions", async () => {
+    const mockTools = {
+      total: 3,
+      items: [
+        {
+          name: "web_search",
+          provider: "search_adapter",
+          description: "Search web",
+          version: "1.0.0",
+          risk_level: "LOW",
+          requires_approval: false,
+          allowed_roles: ["*"],
+          input_schema: {},
+          output_schema: {},
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockTools,
+    } as Response);
+
+    const res = await api.getTools("comp-1", "software_engineer");
+    expect(res.total).toBe(3);
+    expect(res.items[0].name).toBe("web_search");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tools?role=software_engineer",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("executeTool sends tool invocation payload and returns record", async () => {
+    const mockRecord = {
+      id: "tool-exec-123",
+      company_id: "comp-1",
+      agent_id: "agent-1",
+      tool_name: "web_search",
+      action: "search",
+      risk_level: "LOW",
+      requires_approval: false,
+      status: "SUCCESS",
+      input_params: { query: "test query" },
+      output_data: { results: [] },
+      duration_ms: 120,
+      created_at: "2026-09-21T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockRecord,
+    } as Response);
+
+    const res = await api.executeTool("comp-1", {
+      agent_id: "agent-1",
+      tool_name: "web_search",
+      action: "search",
+      parameters: { query: "test query" },
+    });
+
+    expect(res.id).toBe("tool-exec-123");
+    expect(res.status).toBe("SUCCESS");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tools/execute",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          agent_id: "agent-1",
+          tool_name: "web_search",
+          action: "search",
+          parameters: { query: "test query" },
+        }),
+      })
+    );
+  });
+
+  it("getToolExecutions returns audit records", async () => {
+    const mockExecs = {
+      total: 1,
+      items: [
+        {
+          id: "tool-exec-123",
+          company_id: "comp-1",
+          agent_id: "agent-1",
+          tool_name: "documents",
+          action: "read",
+          risk_level: "LOW",
+          requires_approval: false,
+          status: "SUCCESS",
+          input_params: {},
+          output_data: {},
+          duration_ms: 50,
+          created_at: "2026-09-21T00:00:00Z",
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockExecs,
+    } as Response);
+
+    const res = await api.getToolExecutions("comp-1", { toolName: "documents", status: "SUCCESS" });
+    expect(res.total).toBe(1);
+    expect(res.items[0].tool_name).toBe("documents");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tools/executions?tool_name=documents&status=SUCCESS",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

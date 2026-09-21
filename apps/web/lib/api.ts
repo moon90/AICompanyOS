@@ -378,6 +378,55 @@ export interface PlanDelegationResult {
   delegations_count: number;
 }
 
+export interface ToolDefinition {
+  name: string;
+  provider: string;
+  description: string;
+  version: string;
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  requires_approval: boolean;
+  allowed_roles: string[];
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+}
+
+export interface ToolListResponse {
+  items: ToolDefinition[];
+  total: number;
+}
+
+export interface ToolExecuteRequest {
+  agent_id: string;
+  tool_name: string;
+  action?: string;
+  parameters?: Record<string, unknown>;
+  task_id?: string;
+  execution_id?: string;
+}
+
+export interface ToolExecutionRecord {
+  id: string;
+  company_id: string;
+  agent_id: string;
+  task_id?: string | null;
+  execution_id?: string | null;
+  tool_name: string;
+  action: string;
+  risk_level: string;
+  requires_approval: boolean;
+  status: "SUCCESS" | "FAILED" | "APPROVAL_REQUIRED" | "BLOCKED" | string;
+  input_params: Record<string, unknown>;
+  output_data: Record<string, unknown>;
+  error_details?: string | null;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface ToolExecutionListResponse {
+  items: ToolExecutionRecord[];
+  total: number;
+}
+
 export interface ApiError {
   detail: string;
   status: number;
@@ -999,6 +1048,74 @@ export const api = {
   ): Promise<ExecutionRecord> {
     return request<ExecutionRecord>(
       `/api/v1/companies/${companyId}/executions/${executionId}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async getTools(companyId: string, role?: string): Promise<ToolListResponse> {
+    const query = role ? `?role=${encodeURIComponent(role)}` : "";
+    return request<ToolListResponse>(`/api/v1/companies/${companyId}/tools${query}`, {
+      method: "GET",
+    });
+  },
+
+  async getToolDefinition(companyId: string, toolName: string): Promise<ToolDefinition> {
+    return request<ToolDefinition>(
+      `/api/v1/companies/${companyId}/tools/definitions/${encodeURIComponent(toolName)}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async executeTool(
+    companyId: string,
+    payload: ToolExecuteRequest
+  ): Promise<ToolExecutionRecord> {
+    return request<ToolExecutionRecord>(
+      `/api/v1/companies/${companyId}/tools/execute`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async getToolExecutions(
+    companyId: string,
+    params?: {
+      agentId?: string;
+      taskId?: string;
+      toolName?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<ToolExecutionListResponse> {
+    const q = new URLSearchParams();
+    if (params?.agentId) q.append("agent_id", params.agentId);
+    if (params?.taskId) q.append("task_id", params.taskId);
+    if (params?.toolName) q.append("tool_name", params.toolName);
+    if (params?.status) q.append("status", params.status);
+    if (params?.limit) q.append("limit", params.limit.toString());
+    if (params?.offset) q.append("offset", params.offset.toString());
+    const query = q.toString() ? `?${q.toString()}` : "";
+    return request<ToolExecutionListResponse>(
+      `/api/v1/companies/${companyId}/tools/executions${query}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async getToolExecution(
+    companyId: string,
+    executionId: string
+  ): Promise<ToolExecutionRecord> {
+    return request<ToolExecutionRecord>(
+      `/api/v1/companies/${companyId}/tools/executions/${executionId}`,
       {
         method: "GET",
       }

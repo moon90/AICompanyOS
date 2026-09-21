@@ -207,6 +207,11 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    tool_execution_records: Mapped[list["ToolExecutionRecord"]] = relationship(
+        "ToolExecutionRecord",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -388,6 +393,11 @@ class Agent(Base):
     )
     execution_records: Mapped[list["ExecutionRecord"]] = relationship(
         "ExecutionRecord",
+        back_populates="agent",
+        cascade="all, delete-orphan",
+    )
+    tool_execution_records: Mapped[list["ToolExecutionRecord"]] = relationship(
+        "ToolExecutionRecord",
         back_populates="agent",
         cascade="all, delete-orphan",
     )
@@ -785,6 +795,12 @@ class Task(Base):
         cascade="all, delete-orphan",
         order_by=lambda: desc(ExecutionRecord.created_at),
     )
+    tool_execution_records: Mapped[list["ToolExecutionRecord"]] = relationship(
+        "ToolExecutionRecord",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by=lambda: desc(ToolExecutionRecord.created_at),
+    )
 
 
 class TaskDependency(Base):
@@ -1001,6 +1017,11 @@ class ExecutionRecord(Base):
     executed_by_user: Mapped["User | None"] = relationship(
         "User", foreign_keys=[executed_by_user_id]
     )
+    tool_executions: Mapped[list["ToolExecutionRecord"]] = relationship(
+        "ToolExecutionRecord",
+        back_populates="execution_record",
+        cascade="all, delete-orphan",
+    )
 
 
 Index(
@@ -1018,3 +1039,104 @@ Index(
     ExecutionRecord.company_id,
     ExecutionRecord.created_at,
 )
+
+
+class ToolExecutionRecord(Base):
+    """Authoritative audit record of an agent external tool invocation through Tool Gateway."""
+
+    __tablename__ = "tool_execution_records"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    execution_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("execution_records.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    risk_level: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="LOW",
+        server_default="LOW",
+    )
+    requires_approval: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="SUCCESS",
+        server_default="SUCCESS",
+    )
+    input_params: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    output_data: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    error_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="tool_execution_records")
+    agent: Mapped["Agent"] = relationship("Agent", back_populates="tool_execution_records")
+    task: Mapped["Task | None"] = relationship("Task", back_populates="tool_execution_records")
+    execution_record: Mapped["ExecutionRecord | None"] = relationship(
+        "ExecutionRecord", back_populates="tool_executions"
+    )
+
+
+Index(
+    "ix_tool_execution_records_company_created",
+    ToolExecutionRecord.company_id,
+    ToolExecutionRecord.created_at,
+)
+Index(
+    "ix_tool_execution_records_agent_created",
+    ToolExecutionRecord.agent_id,
+    ToolExecutionRecord.created_at,
+)
+Index(
+    "ix_tool_execution_records_task_created",
+    ToolExecutionRecord.task_id,
+    ToolExecutionRecord.created_at,
+)
+

@@ -16,6 +16,7 @@ from apps.api.routes.health import router as health_router
 from apps.api.routes.project import router as project_router
 from apps.api.routes.system import router as system_router
 from apps.api.routes.task import router as task_router
+from apps.api.routes.tool import router as tool_router
 from infrastructure.config import Settings, get_settings
 from infrastructure.security.rate_limiter import LoginRateLimiter
 
@@ -64,6 +65,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(task_router)
     application.include_router(delegation_router)
     application.include_router(execution_router)
+    application.include_router(tool_router)
 
     return application
 

@@ -411,7 +411,7 @@ export default function DashboardPage() {
                 <span className="truncate">{activeCompany ? activeCompany.name : "Unassigned"}</span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
-                {activeCompany ? `${departmentCount} Depts · ${agentCount} Agents · ${planCount} Plans` : "Phase 8 Active"}
+                {activeCompany ? `${departmentCount} Depts · ${agentCount} Agents · ${planCount} Plans` : "Phase 9 Active"}
               </p>
             </div>
           </div>

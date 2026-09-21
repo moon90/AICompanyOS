@@ -391,20 +391,78 @@
   * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_execution.py`.
   * Added 2 frontend client unit tests in `apps/web/lib/api.test.ts`.
 
+### Phase 9 — Tool Gateway (Controlled External Tools) (COMPLETE)
+* **Authoritative Persistence & Database Models (`infrastructure/database/models.py`):**
+  * Implemented `ToolExecutionRecord` SQLAlchemy model:
+    * Primary key UUID `id`.
+    * Foreign keys with `ON DELETE CASCADE`: `company_id`, `agent_id`, optional `task_id`, optional `execution_id`.
+    * Tool invocation metadata: `tool_name`, `action`, `risk_level` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), `requires_approval` (Boolean), `status` (`SUCCESS`, `FAILED`, `APPROVAL_REQUIRED`, `BLOCKED`).
+    * Structured I/O & audit: `input_params` (sanitized JSON), `output_data` (normalized JSON), `error_details` (Text), `duration_ms` (Integer).
+    * Timestamps & compound indexes: `ix_tool_execution_records_company_created`, `ix_tool_execution_records_agent_created`, `ix_tool_execution_records_task_created`, `ix_tool_execution_records_tool_name`.
+    * Added `tool_execution_records` relationships on `Company`, `Agent`, `Task`, and `ExecutionRecord` models.
+* **Database Migrations:**
+  * Created Alembic migration `0009_create_tool_system.py`.
+  * Verified forward upgrade, complete rollback (`downgrade -1`), and re-upgrade with 0 schema drift (`alembic check`).
+* **Domain Tool Gateway Layer (`domain/tools/`):**
+  * `schemas.py`: `ToolRiskLevel`, `ToolExecutionStatus`, `ToolDefinition`, `ToolCallRequest`, `ToolCallResult`, and normalized domain models: `SearchResultItem`, `SearchResult`, `DocumentContent`, `GitHubResult`.
+  * `exceptions.py`: `ToolError`, `ToolNotFoundError`, `ToolValidationError`, `ToolPermissionDeniedError`, `ToolApprovalRequiredError`, `ToolExecutionFailedError`, `ToolAccessDeniedError`, `ToolExecutionNotFoundError`.
+* **Tool Gateway Pipeline & Core Tools (`tools/`):**
+  * `tools/gateway/validator.py`: `ToolValidator` enforcing JSON schema validation and regex pattern masking for secrets, tokens, API keys, and passwords.
+  * `tools/gateway/permissions.py`: `ToolPermissionChecker` checking role-based access control and authority levels.
+  * `tools/gateway/risk.py`: `ToolRiskEvaluator` assessing risk tiers and flagging actions that mandate human approval.
+  * `tools/gateway/registry.py`: `ToolRegistry` maintaining available tools and role-based discovery.
+  * `tools/gateway/gateway.py`: `ToolGateway` executing the 8-step security pipeline: sanitize parameters $\to$ lookup tool $\to$ validate schema $\to$ check permissions $\to$ evaluate risk $\to$ approval check $\to$ adapter execution $\to$ package normalized result.
+  * **3 Foundational Tool Adapters:**
+    1. `tools/web/search.py`: `WebSearchTool` returning normalized search results (`title`, `url`, `snippet`).
+    2. `tools/documents/reader.py`: `DocumentsTool` providing verified internal document access (`architecture_spec`, `security_guidelines`).
+    3. `tools/github/inspector.py`: `GitHubTool` providing repository inspection, branches, commits, and issues for engineering roles.
+* **Application Services:**
+  * `application/services/tool_service.py`:
+    * Multi-tenant membership verification and tenant isolation.
+    * Agent verification and active status validation.
+    * Invocation of `ToolGateway` with caller role and authority level.
+    * Immutable persistence of `ToolExecutionRecord` with sanitized inputs and normalized outputs.
+    * Methods: `list_tools`, `get_tool`, `execute_tool`, `list_tool_executions`, `get_tool_execution`.
+  * `application/services/system_service.py`: Updated current phase telemetry to `Phase 9 — Tool Gateway`.
+* **API Layer (`apps/api/`):**
+  * `apps/api/schemas/tool.py`: `ToolDefinitionResponse`, `ToolListResponse`, `ToolExecuteApiRequest`, `ToolExecutionResponse`, `ToolExecutionListResponse`.
+  * `apps/api/routes/tool.py`:
+    * `GET /api/v1/companies/{company_id}/tools`
+    * `GET /api/v1/companies/{company_id}/tools/definitions/{tool_name}`
+    * `POST /api/v1/companies/{company_id}/tools/execute`
+    * `GET /api/v1/companies/{company_id}/tools/executions`
+    * `GET /api/v1/companies/{company_id}/tools/executions/{execution_id}`
+  * Routers mounted in `apps/api/main.py`.
+* **Frontend Web Application (`apps/web/`):**
+  * `apps/web/lib/api.ts`: Added `ToolDefinition`, `ToolListResponse`, `ToolExecuteRequest`, `ToolExecutionRecord`, `ToolExecutionListResponse` interfaces and client methods `getTools`, `getToolDefinition`, `executeTool`, `getToolExecutions`, `getToolExecution`.
+  * `apps/web/app/tools/page.tsx`:
+    * Tool Registry tab: cards for all registered tools with provider, version, risk badges, permitted roles, and quick test links.
+    * Interactive Runner tab: agent selector, tool & action picker, presets for all tools (including approval demo), JSON parameter editor, live pipeline execution, normalized output inspector, and sanitized parameter preview.
+    * Audit Trail tab: filterable, searchable table of immutable execution records with duration, risk level, status badges, and detail modal.
+  * `apps/web/components/shell/Sidebar.tsx`: Added "Tool Gateway" navigation item under Work Management.
+  * `apps/web/app/page.tsx`: Updated telemetry indicators to `Phase 9 Active`.
+* **Testing & Quality Assurance:**
+  * Added 5 unit tests in `tests/unit/test_tool_registry.py`.
+  * Added 4 unit tests in `tests/unit/test_tool_validator.py`.
+  * Added 6 unit tests in `tests/unit/test_tool_gateway.py`.
+  * Added 6 unit tests in `tests/unit/test_tool_service.py`.
+  * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_tools.py`.
+  * Added 3 frontend client unit tests in `apps/web/lib/api.test.ts`.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (84 passed in 10.94s) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (106 passed in 11.79s) |
 | **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (128 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (120 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (22 tests in 2 files in 275ms) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (107 files compliant) |
+| **Python Static Type Checking** | `mypy domain/ application/ tools/ apps/api/` | **PASSED** (72 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (25 tests in 2 files in 295ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
-| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0008` applied on PostgreSQL) |
+| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (15 routes compiled, static generation verified) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0009` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
 | **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
 
@@ -412,24 +470,25 @@
 
 ## Important Architectural Decisions
 
-1. **Phase 8 Golden Rule Enforced in Code:**
-   An agent claiming "Task completed" does **not** automatically make the task `COMPLETED`. The execution service transitions the task to `VERIFYING`, stores the structured deliverable, and waits for operator verification.
-2. **First-Class Execution Audit Trail with `ExecutionRecord`:**
-   Every execution run produces an immutable `ExecutionRecord` containing step-by-step reasoning (`steps_json`), duration, token usage, cost, deliverable, and error details.
-3. **Hard Bounds Guardrails (`AgentRuntimeEngine`):**
-   The engine enforces strict execution boundaries: `asyncio.wait_for` timeout guard (`max_duration_seconds`), step limit guard (`max_steps`), token budgets, and cost ceilings.
-4. **Clean Decoupling via Protocol & Lazy Import:**
-   `domain/runtime/engine.py` defines an `ExecutionGateway` protocol to interact with LLM providers without circular import dependencies on `infrastructure.llm`.
-5. **Role-Specific Specialist Outputs:**
-   Specialist agents (Frontend, Backend, QA, DevOps, Architects, Analysts) produce structured deliverables in appropriate formats (TypeScript, Python, Markdown, YAML) matching their functional domain.
+1. **Tool Gateway Security Boundary Enforced in Code:**
+   No agent has direct access to external APIs or network endpoints. All interactions are strictly funneled through the 8-step Tool Gateway pipeline: parameter sanitization $\to$ registry lookup $\to$ schema validation $\to$ permission check $\to$ risk evaluation $\to$ approval check $\to$ adapter execution $\to$ output normalization.
+2. **Approval Gate Interception:**
+   Actions requiring approval (`HIGH`/`CRITICAL` risk or `requires_approval = True`) are halted immediately by the gateway with status `APPROVAL_REQUIRED` and duration metrics recorded. Live execution is prevented until Phase 10 approval workflow is integrated.
+3. **Automated Secret Sanitization:**
+   Before persisting or logging input parameters, `ToolValidator` scrubs sensitive credentials (API keys, GitHub tokens, bearer headers, passwords) using regular expression patterns.
+4. **Normalized Domain Output Contracts:**
+   Tools return strongly-typed domain packets (`SearchResult`, `DocumentContent`, `GitHubResult`), preventing messy raw external payloads from polluting agent contexts.
+5. **Immutable Tool Execution Audit Trail (`ToolExecutionRecord`):**
+   Every invocation is permanently recorded in PostgreSQL with foreign keys cascading to company, agent, optional task, and optional execution record.
 6. **Runtime Active Presence Remains 0:**
-   Executing tasks via the runtime engine runs bounded synchronous executions; persistent background agent loops and active socket presence remain strictly reserved for Phase 14.
+   Active agent presence and long-lived background loops remain strictly at 0, reserved for Phase 14.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 9 — Tool Integration & Agent Capabilities**
+**Phase 10 — Approvals & Human Oversight System**
 *(Awaiting user authorization before proceeding).*
+
 
 

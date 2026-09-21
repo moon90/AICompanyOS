@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   User as UserIcon,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 import { User } from "@/lib/api";
@@ -95,6 +96,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           icon: CheckSquare,
           phaseBadge: "Phase 6",
           isCurrent: pathname === "/tasks",
+        },
+        {
+          name: "Tool Gateway",
+          href: "/tools",
+          icon: Wrench,
+          phaseBadge: "Phase 9",
+          isCurrent: pathname === "/tools",
         },
         {
           name: "Approvals",
