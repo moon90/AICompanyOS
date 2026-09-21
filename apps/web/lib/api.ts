@@ -229,6 +229,77 @@ export interface AgentDetail extends Agent {
   }>;
 }
 
+export interface ProjectTaskStats {
+  total_tasks: number;
+  completed_tasks: number;
+  blocked_tasks: number;
+  in_progress_tasks: number;
+  planned_tasks: number;
+}
+
+export interface Project {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string | null;
+  objective: string | null;
+  status: string;
+  priority: string;
+  owner_user_id: string | null;
+  owner_agent_id: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  stats?: ProjectTaskStats;
+}
+
+export interface ProjectListResponse {
+  items: Project[];
+  total: number;
+}
+
+export interface TaskDependency {
+  id: string;
+  task_id: string;
+  depends_on_task_id: string;
+  depends_on_task_title: string | null;
+  depends_on_task_status: string | null;
+  created_at: string;
+}
+
+export interface Task {
+  id: string;
+  company_id: string;
+  project_id: string | null;
+  parent_task_id: string | null;
+  title: string;
+  description: string | null;
+  objective: string | null;
+  created_by_user_id: string | null;
+  assigned_to_agent_id: string | null;
+  assigned_to_user_id: string | null;
+  department_id: string | null;
+  status: string;
+  priority: string;
+  deadline: string | null;
+  output: string | null;
+  error_details: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  project_name: string | null;
+  assigned_agent_name: string | null;
+  assigned_agent_role: string | null;
+  department_name: string | null;
+  dependencies: TaskDependency[];
+  subtasks_count: number;
+}
+
+export interface TaskListResponse {
+  items: Task[];
+  total: number;
+}
+
 export interface ApiError {
   detail: string;
   status: number;
@@ -540,4 +611,215 @@ export const api = {
       }
     );
   },
+
+  async getProjects(
+    companyId: string,
+    params?: {
+      status?: string;
+      priority?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<ProjectListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.priority) searchParams.set("priority", params.priority);
+    if (params?.search) searchParams.set("search", params.search);
+    if (params?.limit) searchParams.set("limit", params.limit.toString());
+    if (params?.offset) searchParams.set("offset", params.offset.toString());
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return request<ProjectListResponse>(`/api/v1/companies/${companyId}/projects${qs}`, {
+      method: "GET",
+    });
+  },
+
+  async createProject(
+    companyId: string,
+    data: {
+      name: string;
+      description?: string;
+      objective?: string;
+      status?: string;
+      priority?: string;
+      owner_user_id?: string;
+      owner_agent_id?: string;
+    }
+  ): Promise<Project> {
+    return request<Project>(`/api/v1/companies/${companyId}/projects`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getProject(companyId: string, projectId: string): Promise<Project> {
+    return request<Project>(`/api/v1/companies/${companyId}/projects/${projectId}`, {
+      method: "GET",
+    });
+  },
+
+  async updateProject(
+    companyId: string,
+    projectId: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      objective: string;
+      status: string;
+      priority: string;
+      owner_user_id: string;
+      owner_agent_id: string;
+    }>
+  ): Promise<Project> {
+    return request<Project>(`/api/v1/companies/${companyId}/projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteProject(companyId: string, projectId: string): Promise<void> {
+    return request<void>(`/api/v1/companies/${companyId}/projects/${projectId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getTasks(
+    companyId: string,
+    params?: {
+      project_id?: string;
+      parent_task_id?: string;
+      status?: string;
+      priority?: string;
+      department_id?: string;
+      assigned_to_agent_id?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<TaskListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.project_id) searchParams.set("project_id", params.project_id);
+    if (params?.parent_task_id) searchParams.set("parent_task_id", params.parent_task_id);
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.priority) searchParams.set("priority", params.priority);
+    if (params?.department_id) searchParams.set("department_id", params.department_id);
+    if (params?.assigned_to_agent_id) searchParams.set("assigned_to_agent_id", params.assigned_to_agent_id);
+    if (params?.search) searchParams.set("search", params.search);
+    if (params?.limit) searchParams.set("limit", params.limit.toString());
+    if (params?.offset) searchParams.set("offset", params.offset.toString());
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return request<TaskListResponse>(`/api/v1/companies/${companyId}/tasks${qs}`, {
+      method: "GET",
+    });
+  },
+
+  async createTask(
+    companyId: string,
+    data: {
+      title: string;
+      description?: string;
+      objective?: string;
+      project_id?: string;
+      parent_task_id?: string;
+      assigned_to_agent_id?: string;
+      assigned_to_user_id?: string;
+      department_id?: string;
+      status?: string;
+      priority?: string;
+      deadline?: string;
+      dependency_task_ids?: string[];
+    }
+  ): Promise<Task> {
+    return request<Task>(`/api/v1/companies/${companyId}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getTask(companyId: string, taskId: string): Promise<Task> {
+    return request<Task>(`/api/v1/companies/${companyId}/tasks/${taskId}`, {
+      method: "GET",
+    });
+  },
+
+  async updateTask(
+    companyId: string,
+    taskId: string,
+    data: Partial<{
+      title: string;
+      description: string;
+      objective: string;
+      project_id: string;
+      department_id: string;
+      priority: string;
+      deadline: string;
+    }>
+  ): Promise<Task> {
+    return request<Task>(`/api/v1/companies/${companyId}/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateTaskStatus(
+    companyId: string,
+    taskId: string,
+    data: {
+      status: string;
+      output?: string;
+      error_details?: string;
+    }
+  ): Promise<Task> {
+    return request<Task>(`/api/v1/companies/${companyId}/tasks/${taskId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async assignTask(
+    companyId: string,
+    taskId: string,
+    data: {
+      assigned_to_agent_id?: string;
+      assigned_to_user_id?: string;
+    }
+  ): Promise<Task> {
+    return request<Task>(`/api/v1/companies/${companyId}/tasks/${taskId}/assign`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async addTaskDependency(
+    companyId: string,
+    taskId: string,
+    data: {
+      depends_on_task_id: string;
+    }
+  ): Promise<TaskDependency> {
+    return request<TaskDependency>(`/api/v1/companies/${companyId}/tasks/${taskId}/dependencies`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async removeTaskDependency(
+    companyId: string,
+    taskId: string,
+    dependsOnTaskId: string
+  ): Promise<void> {
+    return request<void>(
+      `/api/v1/companies/${companyId}/tasks/${taskId}/dependencies/${dependsOnTaskId}`,
+      {
+        method: "DELETE",
+      }
+    );
+  },
+
+  async deleteTask(companyId: string, taskId: string): Promise<void> {
+    return request<void>(`/api/v1/companies/${companyId}/tasks/${taskId}`, {
+      method: "DELETE",
+    });
+  },
 };
+

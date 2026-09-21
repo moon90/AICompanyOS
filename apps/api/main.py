@@ -11,7 +11,9 @@ from apps.api.routes.auth import router as auth_router
 from apps.api.routes.ceo import router as ceo_router
 from apps.api.routes.company import router as company_router
 from apps.api.routes.health import router as health_router
+from apps.api.routes.project import router as project_router
 from apps.api.routes.system import router as system_router
+from apps.api.routes.task import router as task_router
 from infrastructure.config import Settings, get_settings
 from infrastructure.security.rate_limiter import LoginRateLimiter
 
@@ -56,6 +58,8 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(company_router)
     application.include_router(agent_router)
     application.include_router(ceo_router)
+    application.include_router(project_router)
+    application.include_router(task_router)
 
     return application
 

@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 5 — CEO Orchestrator Foundation** (COMPLETE)
+**Phase 6 — Projects & Basic Tasks** (COMPLETE)
 
 ---
 
@@ -254,20 +254,55 @@
   * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_ceo.py`.
   * Added 4 frontend client unit tests in `apps/web/lib/api.test.ts`.
 
+### Phase 6 — Projects & Basic Tasks (COMPLETE)
+* **Authoritative Persistence & Data Modeling (`infrastructure/database/models.py`):**
+  * `Project` model (`projects` table) with fields: `id`, `company_id`, `name`, `description`, `objective`, `status` (`PLANNED`, `ACTIVE`, `BLOCKED`, `COMPLETED`, `CANCELLED`), `priority`, `owner_user_id`, `owner_agent_id`, `created_at`, `updated_at`, `completed_at`.
+  * `Task` model (`tasks` table) with fields: `id`, `company_id`, `project_id`, `parent_task_id`, `title`, `description`, `objective`, `created_by_user_id`, `created_by_agent_id`, `assigned_to_agent_id`, `assigned_to_user_id`, `department_id`, `status` (12 authoritative statuses), `priority`, `deadline`, `output`, `error_details`, `created_at`, `started_at`, `completed_at`.
+  * `TaskDependency` model (`task_dependencies` table) with foreign keys to `tasks.id` and unique constraint `uq_task_dependencies_pair`.
+  * Added cascade relationships on `Company`: `projects`, `tasks`.
+  * Created performance indexes for tenant scoping, status querying, and project/assignment lookups.
+* **Database Migration (`database/migrations/versions/0006_create_projects_tasks.py`):**
+  * Created revision `0006_create_projects_tasks`. Applied cleanly via `alembic upgrade head`. Reversibility verified with clean downgrade and re-upgrade. `alembic check` verified with 0 schema drift.
+* **Domain Layer (`domain/work/`):**
+  * Domain exceptions: `ProjectNotFoundError`, `TaskNotFoundError`, `WorkAccessDeniedError`, `InvalidStatusTransitionError`, `CircularDependencyError`, `SelfDependencyError`, `InvalidWorkAssignmentError`.
+  * Status enumerations: `ProjectStatus`, `ProjectPriority`, `TaskStatus`, `TaskPriority`.
+  * `TaskStateMachine`: Transition matrix enforcement across all 12 statuses and automatic `started_at` / `completed_at` timestamp management.
+* **Application Services (`application/services/`):**
+  * `ProjectService`: Project CRUD, task count rollup statistics, and tenant isolation.
+  * `TaskService`: Task creation with project/parent links, automatic promotion from `CREATED` to `ASSIGNED` on specialist assignment, status transitions, assignment updates, prerequisite dependency management with graph reachability cycle prevention (rejecting $A \to B \to A$ and multi-node cycles), and company boundary checks.
+  * Updated `SystemService`: `CURRENT_PHASE = "Phase 6 — Projects & Basic Tasks"`.
+* **API Layer (`apps/api/`):**
+  * Pydantic schemas in `apps/api/schemas/work.py`.
+  * Project router mounted at `/api/v1/companies/{company_id}/projects` (`GET /`, `POST /`, `GET /{id}`, `PATCH /{id}`, `DELETE /{id}`).
+  * Task router mounted at `/api/v1/companies/{company_id}/tasks` (`GET /`, `POST /`, `GET /{id}`, `PATCH /{id}`, `PATCH /{id}/status`, `POST /{id}/assign`, `POST /{id}/dependencies`, `DELETE /{id}/dependencies/{dep_id}`, `DELETE /{id}`).
+  * Routers registered in `apps/api/main.py`.
+* **Frontend Web Application (`apps/web/`):**
+  * Extended `apps/web/lib/api.ts` with project and task TypeScript interfaces and complete API methods.
+  * Implemented Project Portfolio Console (`apps/web/app/projects/page.tsx`) with status filters, priority selector, search, project cards with progress bars and task stats, "New Project" modal, and project detail drawer.
+  * Implemented Task Management Console (`apps/web/app/tasks/page.tsx`) adhering to `docs/UI.md` §§ 31 & 32 with multi-faceted filtering (status, project, department, agent, search), task table with human-readable IDs (`TASK-XXXXXX`), "New Task" modal, and Task Detail drawer with lifecycle state timeline, status progression buttons, assigned specialist link, dependency checklist, and output/error log view.
+  * Updated Dashboard (`apps/web/app/page.tsx`): Active Projects and Open Tasks cards display live PostgreSQL counts, TopBar operational telemetry updated to `Operational · Phase 6 Active`, and honest `0` runtime active presence preserved.
+* **Testing & Quality Assurance:**
+  * Added 5 unit tests in `tests/unit/test_task_state_machine.py`.
+  * Added 3 unit tests in `tests/unit/test_project_service.py`.
+  * Added 4 unit tests in `tests/unit/test_task_service.py`.
+  * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_projects.py`.
+  * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_tasks.py`.
+  * Added 2 frontend unit tests in `apps/web/lib/api.test.ts`.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (47 passed in 5.61s) |
+| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (61 passed in 7.71s) |
 | **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (92 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (84 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (16 tests in 2 files in 262ms) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (106 files compliant) |
+| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (98 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (18 tests in 2 files in 270ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0005` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0006` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
 | **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
 
@@ -275,28 +310,21 @@
 
 ## Important Architectural Decisions
 
-1. **CEO Planning / Proposal State != Task Execution State:**
-   The CEO produces structured plan proposals, dependency DAGs, and delegation proposals. No execution engine, background workers, or task runners are introduced in Phase 5. All proposals remain in `"proposed"` status awaiting future human governance or task engine integration (Phase 6+).
-2. **Registered Agent State != Runtime Agent State:**
-   Registered agents in PostgreSQL represent organizational readiness, role definitions, and capability declarations. Runtime agent state (`working`, `idle`, `offline`) is kept strictly at `0` until Phase 14 (Agent Presence).
-3. **Recommendation vs Decision Distinction:**
-   The CEO cannot authorize its own plans or execute irreversible actions. Steps requiring governance approval generate explicit `ApprovalRequirement` gates with risk levels.
-4. **Provider-Agnostic LLM Gateway:**
-   The application service depends on `LLMGateway`, not a specific model vendor. `DeterministicPlannerProvider` provides fast, offline, and 100% reproducible test verification, while allowing seamless integration of commercial LLM adapters.
-5. **Strict DAG Safety Bounds:**
-   Plans are bounded to maximum 20 steps and maximum 5 dependency levels to prevent infinite loops, deep recursion, or unmanageable orchestration graphs.
-6. **Backend-Enforced Company Isolation:**
-   All CEO operations verify company membership at the database level. Cross-company agent assignments or context leaks are strictly rejected.
-
----
-
-## Known Risks & Issues
-
-* **Asynchronous LLM Latency in Production:** When external commercial LLMs are configured in production, plan synthesis may take 5–15 seconds. Future phases should support asynchronous task dispatch with progress notifications.
+1. **Persistent Projects and Tasks Before Autonomous Execution:**
+   Projects and tasks exist as authoritative PostgreSQL records with strict state machines before any background agent execution loops (Phase 8) or automated CEO delegation (Phase 7) are introduced.
+2. **Dedicated Task Dependencies with Cycle Prevention:**
+   A dedicated `TaskDependency` table stores directed prerequisite edges. `TaskService` performs breadth-first search reachability analysis on existing company dependencies to reject any self-dependency or circular dependency ($A \to B \to A$ or transitive).
+3. **State Machine Integrity & Automatic Timestamps:**
+   Tasks cannot skip lifecycle stages arbitrarily. Transitioning into `IN_PROGRESS` automatically records `started_at`, entering terminal statuses records `completed_at`, and re-opening a task clears `completed_at`.
+4. **Kanban Deferred to Phase 10:**
+   Kanban boards are a visual perspective of project and task state; Phase 6 establishes authoritative state and tabular/drawer views without building a separate Kanban subsystem.
+5. **Runtime Agent Presence Remains 0:**
+   Assigning a task to a registered agent records the organizational assignment, but does not activate runtime execution or background agent presence (Phase 14).
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 6 — Projects & Basic Tasks**
+**Phase 7 — Task Assignment & Delegation**
 *(Awaiting user authorization before proceeding).*
+

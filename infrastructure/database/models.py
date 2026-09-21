@@ -185,6 +185,16 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    projects: Mapped[list["Project"]] = relationship(
+        "Project",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    tasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -540,3 +550,259 @@ Index("ix_agents_company_department", Agent.company_id, Agent.department_id)
 Index("ix_agent_definitions_agent_current", AgentDefinition.agent_id, AgentDefinition.is_current)
 Index("ix_ceo_plans_company_created", CeoPlan.company_id, CeoPlan.created_at)
 Index("ix_ceo_plans_company_status", CeoPlan.company_id, CeoPlan.status)
+
+
+class Project(Base):
+    """Project entity adhering to docs/Phases.md Section 10 and docs/Architecture.md Section 43."""
+
+    __tablename__ = "projects"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    objective: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PLANNED",
+        server_default="PLANNED",
+    )
+    priority: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="medium",
+        server_default="medium",
+    )
+    owner_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    owner_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="projects")
+    owner_user: Mapped["User | None"] = relationship("User")
+    owner_agent: Mapped["Agent | None"] = relationship("Agent")
+    tasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+
+
+class Task(Base):
+    """Task entity adhering to docs/Phases.md Section 10 and docs/Architecture.md Section 43."""
+
+    __tablename__ = "tasks"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    parent_task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    objective: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assigned_to_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assigned_to_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    department_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="CREATED",
+        server_default="CREATED",
+    )
+    priority: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="medium",
+        server_default="medium",
+    )
+    deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="tasks")
+    project: Mapped["Project | None"] = relationship("Project", back_populates="tasks")
+    parent_task: Mapped["Task | None"] = relationship(
+        "Task",
+        remote_side=[id],
+        back_populates="subtasks",
+    )
+    subtasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="parent_task",
+        cascade="all, delete-orphan",
+    )
+    department: Mapped["Department | None"] = relationship("Department")
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    created_by_agent: Mapped["Agent | None"] = relationship(
+        "Agent", foreign_keys=[created_by_agent_id]
+    )
+    assigned_agent: Mapped["Agent | None"] = relationship(
+        "Agent", foreign_keys=[assigned_to_agent_id]
+    )
+    assigned_user: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_to_user_id])
+
+    dependencies: Mapped[list["TaskDependency"]] = relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.task_id",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    dependents: Mapped[list["TaskDependency"]] = relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.depends_on_task_id",
+        back_populates="depends_on_task",
+        cascade="all, delete-orphan",
+    )
+
+
+class TaskDependency(Base):
+    """Task dependency link adhering to docs/Architecture.md line 1175."""
+
+    __tablename__ = "task_dependencies"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    depends_on_task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("task_id", "depends_on_task_id", name="uq_task_dependencies_pair"),
+    )
+
+    # Relationships
+    task: Mapped["Task"] = relationship(
+        "Task", foreign_keys=[task_id], back_populates="dependencies"
+    )
+    depends_on_task: Mapped["Task"] = relationship(
+        "Task", foreign_keys=[depends_on_task_id], back_populates="dependents"
+    )
+
+
+Index("ix_projects_company_status", Project.company_id, Project.status)
+Index("ix_projects_company_created", Project.company_id, Project.created_at)
+Index("ix_tasks_company_status", Task.company_id, Task.status)
+Index("ix_tasks_company_project", Task.company_id, Task.project_id)
+Index("ix_tasks_company_assigned", Task.company_id, Task.assigned_to_agent_id)
+Index("ix_tasks_company_created", Task.company_id, Task.created_at)
+Index("ix_task_dependencies_company", TaskDependency.company_id)

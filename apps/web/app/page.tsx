@@ -29,6 +29,9 @@ export default function DashboardPage() {
   const [agentCount, setAgentCount] = useState<number>(0);
   const [planCount, setPlanCount] = useState<number>(0);
   const [hasCeo, setHasCeo] = useState<boolean>(false);
+  const [projectCount, setProjectCount] = useState<number>(0);
+  const [openTaskCount, setOpenTaskCount] = useState<number>(0);
+  const [blockedTaskCount, setBlockedTaskCount] = useState<number>(0);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -46,27 +49,40 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const [depts, ags, plns, ctx] = await Promise.all([
+          const [depts, ags, plns, ctx, projs, tsks] = await Promise.all([
             api.getDepartments(primaryCompany.id).catch(() => []),
             api.getAgents(primaryCompany.id).catch(() => []),
             api.getPlans(primaryCompany.id).catch(() => []),
             api.getCeoContext(primaryCompany.id).catch(() => null),
+            api.getProjects(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+            api.getTasks(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
           ]);
           setDepartmentCount(depts.length);
           setAgentCount(ags.length);
           setPlanCount(plns.length);
           setHasCeo(!!ctx?.ceo_agent);
+          setProjectCount(projs.total);
+          const open = tsks.items.filter((t) => t.status !== "COMPLETED" && t.status !== "CANCELLED");
+          const blocked = tsks.items.filter((t) => t.status === "BLOCKED");
+          setOpenTaskCount(open.length);
+          setBlockedTaskCount(blocked.length);
         } catch {
           setDepartmentCount(0);
           setAgentCount(0);
           setPlanCount(0);
           setHasCeo(false);
+          setProjectCount(0);
+          setOpenTaskCount(0);
+          setBlockedTaskCount(0);
         }
       } else {
         setDepartmentCount(0);
         setAgentCount(0);
         setPlanCount(0);
         setHasCeo(false);
+        setProjectCount(0);
+        setOpenTaskCount(0);
+        setBlockedTaskCount(0);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -83,9 +99,9 @@ export default function DashboardPage() {
   const metricCards = [
     {
       title: "Active Projects",
-      value: "0",
-      subtext: "No active projects",
-      phaseNote: "Scheduled for Phase 3/6",
+      value: projectCount.toString(),
+      subtext: projectCount > 0 ? `${projectCount} active projects in portfolio` : "No active projects",
+      phaseNote: "Phase 6 Active",
       icon: FolderGit2,
       accentColor: "text-blue-400",
       bgColor: "bg-blue-500/10",
@@ -93,9 +109,9 @@ export default function DashboardPage() {
     },
     {
       title: "Open Tasks",
-      value: "0",
-      subtext: "No open tasks",
-      phaseNote: "Scheduled for Phase 6",
+      value: openTaskCount.toString(),
+      subtext: openTaskCount > 0 ? `${openTaskCount} tasks in execution pipeline` : "No open tasks",
+      phaseNote: "Phase 6 Active",
       icon: CheckSquare,
       accentColor: "text-indigo-400",
       bgColor: "bg-indigo-500/10",
@@ -103,8 +119,8 @@ export default function DashboardPage() {
     },
     {
       title: "Blocked Tasks",
-      value: "0",
-      subtext: "No blocked tasks",
+      value: blockedTaskCount.toString(),
+      subtext: blockedTaskCount > 0 ? `${blockedTaskCount} tasks blocked on dependencies` : "0 blocked tasks",
       phaseNote: "Operational baseline",
       icon: AlertTriangle,
       accentColor: "text-amber-400",
@@ -125,7 +141,7 @@ export default function DashboardPage() {
       title: "Active Agents",
       value: "0",
       subtext: agentCount > 0 ? `${agentCount} registered (0 runtime active)` : "No active agents",
-      phaseNote: "Execution loop scheduled for Phase 5",
+      phaseNote: "Runtime Presence scheduled for Phase 14",
       icon: Users,
       accentColor: "text-emerald-400",
       bgColor: "bg-emerald-500/10",
@@ -243,7 +259,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Phase 5 Active
+                Phase 6 Active
               </span>
             </div>
 

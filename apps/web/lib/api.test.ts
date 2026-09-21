@@ -503,6 +503,116 @@ describe("Web API Client", () => {
       })
     );
   });
+  it("getProjects and createProject perform correct requests", async () => {
+    const mockList = {
+      items: [
+        {
+          id: "proj-1",
+          company_id: "comp-1",
+          name: "Project Titan",
+          description: "Major milestone",
+          objective: "Ship on time",
+          status: "PLANNED",
+          priority: "high",
+          owner_user_id: "user-1",
+          owner_agent_id: null,
+          created_at: "2026-09-21T00:00:00Z",
+          updated_at: "2026-09-21T00:00:00Z",
+          completed_at: null,
+          stats: {
+            total_tasks: 5,
+            completed_tasks: 2,
+            blocked_tasks: 0,
+            in_progress_tasks: 1,
+            planned_tasks: 2,
+          },
+        },
+      ],
+      total: 1,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockList,
+    } as Response);
+
+    const res = await api.getProjects("comp-1", { status: "PLANNED" });
+    expect(res.total).toBe(1);
+    expect(res.items[0].name).toBe("Project Titan");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/projects?status=PLANNED",
+      expect.objectContaining({ method: "GET" })
+    );
+
+    // Test createProject
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockList.items[0],
+    } as Response);
+
+    const created = await api.createProject("comp-1", { name: "Project Titan" });
+    expect(created.name).toBe("Project Titan");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/projects",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("getTasks and createTask perform correct requests", async () => {
+    const mockTask = {
+      id: "task-1",
+      company_id: "comp-1",
+      project_id: "proj-1",
+      parent_task_id: null,
+      title: "Write Architecture Spec",
+      description: "Draft specification",
+      objective: "Approved RFC",
+      created_by_user_id: "user-1",
+      assigned_to_agent_id: "agent-1",
+      assigned_to_user_id: null,
+      department_id: "dept-1",
+      status: "ASSIGNED",
+      priority: "high",
+      deadline: null,
+      output: null,
+      error_details: null,
+      created_at: "2026-09-21T00:00:00Z",
+      started_at: null,
+      completed_at: null,
+      dependencies: [],
+      subtasks_count: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [mockTask], total: 1 }),
+    } as Response);
+
+    const res = await api.getTasks("comp-1", { project_id: "proj-1" });
+    expect(res.total).toBe(1);
+    expect(res.items[0].title).toBe("Write Architecture Spec");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tasks?project_id=proj-1",
+      expect.objectContaining({ method: "GET" })
+    );
+
+    // Test updateTaskStatus
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...mockTask, status: "IN_PROGRESS" }),
+    } as Response);
+
+    const updated = await api.updateTaskStatus("comp-1", "task-1", { status: "IN_PROGRESS" });
+    expect(updated.status).toBe("IN_PROGRESS");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/tasks/task-1/status",
+      expect.objectContaining({ method: "PATCH" })
+    );
+  });
 
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
