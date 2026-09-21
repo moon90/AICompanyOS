@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.health import router as health_router
+from apps.api.routes.system import router as system_router
 from infrastructure.config import Settings, get_settings
 from infrastructure.security.rate_limiter import LoginRateLimiter
 
@@ -48,6 +49,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     # Register routers
     application.include_router(health_router)
     application.include_router(auth_router)
+    application.include_router(system_router)
 
     return application
 

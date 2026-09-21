@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 1 — Authentication** (COMPLETE)
+**Phase 2 — Application Shell & Dashboard** (COMPLETE)
 
 ---
 
@@ -45,7 +45,53 @@
   * Built executive `/login` page in `apps/web/app/login/page.tsx` with logo, email, password, forgot password prompt, and error alert displays.
   * Built executive `/register` page in `apps/web/app/register/page.tsx` with full name, email, password, confirm password, and client-side validation.
   * Implemented route protection in `apps/web/middleware.ts` redirecting unauthenticated users to `/login`.
-  * Updated `apps/web/app/page.tsx` to display real authenticated session information, active operator details, and an explicit Sign Out action.
+
+### Phase 2 — Application Shell & Dashboard (COMPLETE)
+* **Design System & Semantic Tokens (`docs/UI.md` § 4, 6, 7, 8):**
+  * Extended `apps/web/tailwind.config.ts` and `apps/web/app/globals.css` with semantic color hierarchy (`surface`, `surface-elevated`, `surface-strong`, `border`, `border-strong`, `text-primary`, `text-secondary`, `text-muted`, `primary`, `success`, `warning`, `error`, `info`).
+  * Enforced Executive dark theme priority with light theme variable parity.
+  * Configured typographic scale (Inter font family, monospace font for technical identifiers).
+* **Application Shell Architecture (`apps/web/components/shell/`):**
+  * Built `Sidebar.tsx` supporting desktop fixed layout and responsive mobile drawer navigation with all 9 Phase 2 sections from `docs/Phases.md` § 6:
+    * `Dashboard` (`/`) [Active Executive Overview]
+    * `Company` (`/company`) [Phase 3 roadmap badge]
+    * `CEO Orchestrator` (`/ceo`) [Phase 5 roadmap badge]
+    * `Agent Registry` (`/agents`) [Phase 4 roadmap badge]
+    * `Projects` (`/projects`) [Phase 6 roadmap badge]
+    * `Tasks` (`/tasks`) [Phase 6 roadmap badge]
+    * `Approvals` (`/approvals`) [Phase 10 roadmap badge]
+    * `Activity` (`/activity`) [Phase 13 roadmap badge]
+    * `Settings` (`/settings`) [Phase 23 roadmap badge]
+  * Built `TopBar.tsx` featuring breadcrumbs, live system operational status badge, command palette placeholder (`⌘K Quick Find`), notifications panel with unread indicator, and authenticated operator profile dropdown with explicit Sign Out trigger.
+  * Built `ShellLayout.tsx` providing responsive drawer management, session verification against `/api/v1/auth/me`, and executive loading skeleton states.
+* **Executive Dashboard (`apps/web/app/page.tsx`):**
+  * Implemented 5 Metric Cards per `docs/Phases.md` § 6:
+    * Active Projects: `0` (Annotated: "No active projects — Scheduled for Phase 3/6")
+    * Open Tasks: `0` (Annotated: "No open tasks — Scheduled for Phase 6")
+    * Blocked Tasks: `0` (Annotated: "No blocked tasks")
+    * Pending Approvals: `0` (Annotated: "No pending approvals — Scheduled for Phase 10")
+    * Active Agents: `0` (Annotated: "No active agents — Scheduled for Phase 4")
+  * Implemented Active Operations Panel with honest empty state:
+    * Icon, title, and descriptive text explaining CEO orchestration activates in Phase 5.
+  * Implemented Recent Activity Panel with honest empty state:
+    * Icon, title, and descriptive text explaining real-time event streaming activates in Phase 13.
+  * Implemented System Foundation & Infrastructure Telemetry Panel:
+    * Displays live telemetry directly from backend `/api/v1/system/status` and `/api/v1/auth/me` (PostgreSQL connectivity verified via `SELECT 1`, authoritative session state, FastAPI gateway version, roadmap phase).
+* **Dedicated Placeholder Pages:**
+  * Implemented structured `PhaseBoundaryCard.tsx` component.
+  * Added dedicated placeholder pages for all future navigation destinations (`/company`, `/ceo`, `/agents`, `/projects`, `/tasks`, `/approvals`, `/activity`, `/settings`), rendering inside `ShellLayout` with specification cross-references and zero simulated data.
+* **Backend Telemetry Service & API:**
+  * Implemented `SystemService` in `application/services/system_service.py` performing live database probe queries decoupled from route handlers.
+  * Implemented `SystemStatusResponse` in `apps/api/schemas/system.py`.
+  * Implemented protected route `GET /api/v1/system/status` in `apps/api/routes/system.py`.
+  * Mounted `system_router` on FastAPI application in `apps/api/main.py`.
+* **Repository Configuration:**
+  * Corrected `.gitignore` rule from `lib/` to `/lib/` to ensure frontend library modules (`apps/web/lib/`) are tracked.
+* **Testing & Quality Assurance:**
+  * Added backend unit tests in `tests/unit/test_system_service.py` (success and simulated database failure).
+  * Added backend integration tests in `tests/integration/test_api_system.py` (unauthenticated 401 and authenticated 200).
+  * Configured Vitest in `apps/web/vitest.config.mts` with happy-dom environment.
+  * Added frontend unit tests in `apps/web/lib/api.test.ts` and `apps/web/components/shell/shell.test.ts`.
 
 ---
 
@@ -53,40 +99,39 @@
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (10 passed in 2.59s) |
+| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (14 passed in 2.97s) |
 | **Python Linting** | `ruff check .` | **PASSED** (0 errors) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (53 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (46 files checked, 0 errors) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (59 files compliant) |
+| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (51 files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web run test` | **PASSED** (5 tests in 2 files) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
-| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (6 routes compiled, static generation verified) |
+| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
 | **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001` & `0002` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
-| **Live Server & Flow Probe** | `uvicorn` + HTTP client | **PASSED** (Register -> Login -> Verify `/me` -> Logout -> 401 confirmed) |
-| **Rate Limiter Verification** | Automated failure threshold test | **PASSED** (HTTP 429 triggered with Retry-After header) |
+| **Authentication Regression** | Automated test suite + edge middleware | **PASSED** (Session validation, logout revocation, route redirect) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **PostgreSQL as Sole Session Authority:**
-   Session state is not stored in JWT claims or frontend memory. Each authenticated session corresponds to an authoritative record in `user_sessions` with SHA-256 hashed token lookups, ensuring instantaneous revocation upon logout.
-2. **Dual-Transport Authentication Support:**
-   The authentication dependency checks both the HttpOnly secure cookie (`ai_company_session`) and the `Authorization: Bearer <token>` header, providing seamless browser cookie management alongside standard API token access.
-3. **Thin API Route Decoupling:**
-   Per `docs/Rules.md` § 7 & § 8, route handlers contain zero database queries or business logic. All registration, hashing, credential verification, and session lifecycle operations are managed strictly by `AuthService`.
-4. **Brute-Force Protection:**
-   Integrated an in-memory sliding-window rate limiter on the login endpoint to prevent credential-stuffing and brute-force attacks before expensive bcrypt evaluations occur.
+1. **Honest Empty States Over Fabricated Data:**
+   Per prompt and `docs/Rules.md` § 2.3, no mock companies, agents, tasks, or metrics were introduced to make the UI look populated. Metric cards honestly display `0` with explicit phase annotations, and operational panels clearly explain roadmap milestones.
+2. **Authoritative State vs Future States:**
+   The application shell strictly separates verified session identity (`User` from PostgreSQL `user_sessions`) from upcoming organizational (Phase 3), agent (Phase 4), and task (Phase 6) models.
+3. **Decoupled Backend Telemetry:**
+   System readiness reporting is powered by `SystemService`, keeping database verification queries completely isolated from route handlers per `docs/Rules.md` § 8.
+4. **Responsive Executive Layout:**
+   Desktop screens utilize a fixed 288px sidebar with high information density, while mobile and tablet screens feature an accessible slide-out navigation drawer toggled via the top bar.
 
 ---
 
 ## Known Risks & Issues
 
-* **Multi-Instance Rate Limiting:** The Phase 1 login rate limiter is in-memory for the local process. In Phase 23+ (Security Hardening), rate limiting state should be transitioned to Redis for distributed horizontally-scaled deployments.
-* **Password Reset Flow:** Password recovery currently instructs users to contact an administrator, as email delivery infrastructure is scheduled for later phases (Phase 9/25).
+* **Distributed Telemetry:** The current `SystemService` checks the primary PostgreSQL database connection. In Phase 24 (Observability & Cost), this service should be extended to probe Redis caching queues and background task runners.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 2 — Application Shell & Dashboard**
+**Phase 3 — Company & Organization**
 *(Awaiting user authorization before proceeding).*
