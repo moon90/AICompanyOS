@@ -27,6 +27,8 @@ export default function DashboardPage() {
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [departmentCount, setDepartmentCount] = useState<number>(0);
   const [agentCount, setAgentCount] = useState<number>(0);
+  const [planCount, setPlanCount] = useState<number>(0);
+  const [hasCeo, setHasCeo] = useState<boolean>(false);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -44,19 +46,27 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const [depts, ags] = await Promise.all([
+          const [depts, ags, plns, ctx] = await Promise.all([
             api.getDepartments(primaryCompany.id).catch(() => []),
             api.getAgents(primaryCompany.id).catch(() => []),
+            api.getPlans(primaryCompany.id).catch(() => []),
+            api.getCeoContext(primaryCompany.id).catch(() => null),
           ]);
           setDepartmentCount(depts.length);
           setAgentCount(ags.length);
+          setPlanCount(plns.length);
+          setHasCeo(!!ctx?.ceo_agent);
         } catch {
           setDepartmentCount(0);
           setAgentCount(0);
+          setPlanCount(0);
+          setHasCeo(false);
         }
       } else {
         setDepartmentCount(0);
         setAgentCount(0);
+        setPlanCount(0);
+        setHasCeo(false);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -189,43 +199,33 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Metric Cards Row per docs/Phases.md § 6 & docs/UI.md § 27 */}
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
-            Company Statistics Overview
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {metricCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={card.title}
-                  className="rounded-xl border border-[#1e2738] bg-[#111724] p-5 flex flex-col justify-between hover:border-slate-700 transition"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-                      {card.title}
-                    </span>
-                    <div className={`p-2 rounded-lg ${card.bgColor} ${card.accentColor} border ${card.borderColor}`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-3xl font-bold tracking-tight text-white font-mono">
-                      {card.value}
-                    </div>
-                    <div className="text-xs text-slate-400 font-medium">
-                      {card.subtext}
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-400 pt-1">
-                      {card.phaseNote}
-                    </div>
+        {/* Top Metric Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {metricCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div
+                key={card.title}
+                className="rounded-xl border border-[#1e2738] bg-[#111724] p-5 flex flex-col justify-between hover:border-slate-700 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-medium text-slate-400">{card.title}</span>
+                  <div className={`p-2 rounded-lg ${card.bgColor} ${card.accentColor} border ${card.borderColor}`}>
+                    <Icon className="w-4 h-4" />
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div>
+                  <div className="text-2xl font-bold text-white font-mono tracking-tight mb-1">
+                    {card.value}
+                  </div>
+                  <div className="text-xs text-slate-400 truncate">{card.subtext}</div>
+                  <div className="text-[10px] text-slate-400 mt-2 pt-2 border-t border-[#1e2738]/60 font-mono">
+                    {card.phaseNote}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Operational Panels Grid */}
@@ -242,27 +242,37 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400">CEO coordination and multi-agent execution</p>
                 </div>
               </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                Phase 5
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Phase 5 Active
               </span>
             </div>
 
-            {/* Honest Empty State */}
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4">
-              <div className="w-12 h-12 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center justify-center mb-4">
+            {/* Phase 5 State */}
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-6 px-4">
+              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-4">
                 <Bot className="w-6 h-6" />
               </div>
               <h4 className="text-sm font-semibold text-white mb-1">
-                No Active Operations
+                {planCount > 0
+                  ? "CEO Planning Active"
+                  : hasCeo
+                  ? "CEO Orchestrator Configured"
+                  : "CEO Agent Required"}
               </h4>
               <p className="text-xs text-slate-400 max-w-sm leading-relaxed mb-4">
-                Autonomous agent coordination and CEO orchestration will activate in{" "}
-                <strong className="text-slate-300">Phase 5</strong>. Once enabled, the CEO agent
-                will plan, delegate to specialists, and track work live in this panel.
+                {planCount > 0
+                  ? `${planCount} strategic plan proposals synthesized by the CEO. All plans remain in PROPOSAL state awaiting governance approval.`
+                  : hasCeo
+                  ? "The CEO agent is registered and ready to intake goals, formulate task graph DAGs, and structure delegation proposals."
+                  : "Register or provision a CEO agent in the Agent Registry to begin strategic goal intake and planning."}
               </p>
-              <span className="text-[11px] font-mono text-slate-400 bg-slate-800/60 px-2.5 py-1 rounded border border-slate-700/60">
-                Awaiting Phase 5 Orchestrator
-              </span>
+              <Link
+                href={hasCeo ? "/ceo" : "/agents"}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-black font-semibold text-xs hover:bg-primary/90 transition-colors"
+              >
+                <span>{hasCeo ? "Open CEO Command Center" : "Provision CEO Agent"}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           </div>
 
@@ -385,7 +395,7 @@ export default function DashboardPage() {
                 <span className="truncate">{activeCompany ? activeCompany.name : "Unassigned"}</span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
-                {activeCompany ? `${departmentCount} Depts · ${agentCount} Agents Registered` : "Phase 4 Ready"}
+                {activeCompany ? `${departmentCount} Depts · ${agentCount} Agents · ${planCount} Plans` : "Phase 5 Active"}
               </p>
             </div>
           </div>

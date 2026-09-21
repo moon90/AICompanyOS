@@ -101,6 +101,124 @@ export interface Agent {
   current_definition: AgentDefinition | null;
 }
 
+export interface CeoContext {
+  company: {
+    id: string;
+    name: string;
+    description: string | null;
+    mission: string | null;
+    industry: string | null;
+    status: string;
+  };
+  ceo_agent: {
+    id: string;
+    name: string;
+    role: string;
+    authority_level: string;
+    status: string;
+  } | null;
+  departments: Array<{
+    id: string;
+    name: string;
+    code: string;
+    lead_role: string | null;
+  }>;
+  agents: Array<{
+    id: string;
+    name: string;
+    role: string;
+    type: string;
+    authority_level: string;
+    reports_to: string | null;
+    department_id: string | null;
+    department_code: string | null;
+    department_name: string | null;
+    mission: string | null;
+    model: string;
+    version: string;
+    capabilities: string[];
+    tools: string[];
+  }>;
+  agent_count: number;
+  department_count: number;
+}
+
+export interface PlanStep {
+  step_id: string;
+  title: string;
+  description: string;
+  assigned_agent_id: string | null;
+  assigned_agent_role: string;
+  department_code: string | null;
+  depends_on: string[];
+  required_capabilities: string[];
+  expected_output: string;
+  verification_criteria: string;
+}
+
+export interface DelegationProposal {
+  proposal_id: string;
+  source_agent_id: string | null;
+  target_agent_id: string | null;
+  target_role: string;
+  objective: string;
+  scope: string;
+  expected_output: string;
+  required_capabilities: string[];
+  constraints: string[];
+  authority_level_required: number;
+}
+
+export interface ApprovalRequirement {
+  step_id: string;
+  action_description: string;
+  risk_level: "low" | "medium" | "high" | "critical";
+  reason_for_approval: string;
+}
+
+export interface CeoPlanSummary {
+  id: string;
+  company_id: string;
+  user_id: string;
+  ceo_agent_id: string | null;
+  goal: string;
+  requested_outcome: string | null;
+  priority: string;
+  status: string;
+  reasoning_summary: string;
+  step_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CeoPlanDetail {
+  id: string;
+  company_id: string;
+  user_id: string;
+  ceo_agent_id: string | null;
+  goal: string;
+  requested_outcome: string | null;
+  priority: string;
+  status: string;
+  reasoning_summary: string;
+  context_snapshot: Record<string, unknown>;
+  plan_steps: PlanStep[];
+  delegation_proposals: DelegationProposal[];
+  approval_requirements: ApprovalRequirement[];
+  risks: Array<{ risk: string; mitigation: string; severity?: string }>;
+  assumptions: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePlanPayload {
+  objective: string;
+  requested_outcome?: string;
+  constraints?: string[];
+  priority?: "low" | "medium" | "high" | "critical";
+  requirements?: string[];
+}
+
 export interface AgentDetail extends Agent {
   definitions: AgentDefinition[];
   subordinates: Array<{
@@ -386,6 +504,37 @@ export const api = {
   ): Promise<AgentDefinition[]> {
     return request<AgentDefinition[]>(
       `/api/v1/companies/${companyId}/agents/${agentId}/definitions`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async getCeoContext(companyId: string): Promise<CeoContext> {
+    return request<CeoContext>(`/api/v1/companies/${companyId}/ceo/context`, {
+      method: "GET",
+    });
+  },
+
+  async createPlan(
+    companyId: string,
+    payload: CreatePlanPayload
+  ): Promise<CeoPlanDetail> {
+    return request<CeoPlanDetail>(`/api/v1/companies/${companyId}/ceo/plan`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getPlans(companyId: string): Promise<CeoPlanSummary[]> {
+    return request<CeoPlanSummary[]>(`/api/v1/companies/${companyId}/ceo/plans`, {
+      method: "GET",
+    });
+  },
+
+  async getPlan(companyId: string, planId: string): Promise<CeoPlanDetail> {
+    return request<CeoPlanDetail>(
+      `/api/v1/companies/${companyId}/ceo/plans/${planId}`,
       {
         method: "GET",
       }

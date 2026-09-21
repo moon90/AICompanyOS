@@ -180,6 +180,11 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    plans: Mapped[list["CeoPlan"]] = relationship(
+        "CeoPlan",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -429,6 +434,103 @@ class AgentDefinition(Base):
     )
 
 
+class CeoPlan(Base):
+    """CEO Plan proposal entity adhering to docs/Phases.md Section 9 and docs/Architecture.md Section 16-20."""
+
+    __tablename__ = "ceo_plans"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    ceo_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    requested_outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="medium",
+        server_default="medium",
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="proposed",
+        server_default="proposed",
+    )
+    reasoning_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    context_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    plan_steps: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    delegation_proposals: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    approval_requirements: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    risks: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    assumptions: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="plans")
+    user: Mapped["User"] = relationship("User")
+    ceo_agent: Mapped["Agent | None"] = relationship("Agent")
+
+
 # Table indexes
 Index("ix_user_sessions_user_expires", UserSession.user_id, UserSession.expires_at)
 Index("ix_departments_company_status", Department.company_id, Department.status)
@@ -436,3 +538,5 @@ Index("ix_company_members_company_role", CompanyMember.company_id, CompanyMember
 Index("ix_agents_company_status", Agent.company_id, Agent.status)
 Index("ix_agents_company_department", Agent.company_id, Agent.department_id)
 Index("ix_agent_definitions_agent_current", AgentDefinition.agent_id, AgentDefinition.is_current)
+Index("ix_ceo_plans_company_created", CeoPlan.company_id, CeoPlan.created_at)
+Index("ix_ceo_plans_company_status", CeoPlan.company_id, CeoPlan.status)

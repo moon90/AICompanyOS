@@ -46,7 +46,7 @@ describe("Web API Client", () => {
       auth_authority: "postgresql_sessions",
       environment: "test",
       version: "0.1.0",
-      current_phase: "Phase 4 — Agent Registry",
+      current_phase: "Phase 5 — CEO Orchestrator Foundation",
       timestamp: "2026-09-21T00:00:00Z",
     };
 
@@ -58,7 +58,7 @@ describe("Web API Client", () => {
 
     const status = await api.getSystemStatus();
     expect(status).toEqual(mockStatus);
-    expect(status.current_phase).toBe("Phase 4 — Agent Registry");
+    expect(status.current_phase).toBe("Phase 5 — CEO Orchestrator Foundation");
   });
 
   it("getCompanies returns list of user companies", async () => {
@@ -325,6 +325,183 @@ describe("Web API Client", () => {
 
     expect(result.version).toBe("1.1");
     expect(result.model).toBe("gemini-2.0-pro");
+  });
+
+  it("getCeoContext returns company context and CEO identity", async () => {
+    const mockContext = {
+      company: {
+        id: "comp-1",
+        name: "Acme Corp",
+        description: "AI Company",
+        mission: "Build future",
+        industry: "Tech",
+        status: "active",
+      },
+      ceo_agent: {
+        id: "ceo-1",
+        name: "Chief Executive Officer",
+        role: "ceo",
+        authority_level: "executive",
+        status: "active",
+      },
+      departments: [],
+      agents: [],
+      agent_count: 11,
+      department_count: 5,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockContext,
+    } as Response);
+
+    const ctx = await api.getCeoContext("comp-1");
+    expect(ctx.company.name).toBe("Acme Corp");
+    expect(ctx.ceo_agent?.role).toBe("ceo");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/ceo/context",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      })
+    );
+  });
+
+  it("createPlan sends POST to plan endpoint with goal payload", async () => {
+    const mockPlanDetail = {
+      id: "plan-1",
+      company_id: "comp-1",
+      user_id: "user-1",
+      ceo_agent_id: "ceo-1",
+      goal: "Expand to Europe",
+      requested_outcome: "Analysis report",
+      priority: "high",
+      status: "proposed",
+      reasoning_summary: "Strategic 4-step decomposition",
+      context_snapshot: {},
+      plan_steps: [
+        {
+          step_id: "step_1",
+          title: "Discovery",
+          description: "Analyze market",
+          assigned_agent_id: "ag-1",
+          assigned_agent_role: "researcher",
+          department_code: "SALES",
+          depends_on: [],
+          required_capabilities: ["research"],
+          expected_output: "Report",
+          verification_criteria: "Complete",
+        },
+      ],
+      delegation_proposals: [],
+      approval_requirements: [],
+      risks: [],
+      assumptions: [],
+      created_at: "2026-09-21T00:00:00Z",
+      updated_at: "2026-09-21T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockPlanDetail,
+    } as Response);
+
+    const payload = {
+      objective: "Expand to Europe",
+      requested_outcome: "Analysis report",
+      priority: "high" as const,
+      constraints: ["No paid ads"],
+      requirements: ["GDPR compliant"],
+    };
+
+    const res = await api.createPlan("comp-1", payload);
+    expect(res.id).toBe("plan-1");
+    expect(res.status).toBe("proposed");
+    expect(res.plan_steps).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/ceo/plan",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify(payload),
+      })
+    );
+  });
+
+  it("getPlans returns array of plan summaries", async () => {
+    const mockSummaries = [
+      {
+        id: "plan-1",
+        company_id: "comp-1",
+        user_id: "user-1",
+        ceo_agent_id: "ceo-1",
+        goal: "Expand to Europe",
+        requested_outcome: null,
+        priority: "high",
+        status: "proposed",
+        reasoning_summary: "Decomposition summary",
+        step_count: 4,
+        created_at: "2026-09-21T00:00:00Z",
+        updated_at: "2026-09-21T00:00:00Z",
+      },
+    ];
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockSummaries,
+    } as Response);
+
+    const res = await api.getPlans("comp-1");
+    expect(res).toHaveLength(1);
+    expect(res[0].goal).toBe("Expand to Europe");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/ceo/plans",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      })
+    );
+  });
+
+  it("getPlan returns single plan detail", async () => {
+    const mockDetail = {
+      id: "plan-1",
+      company_id: "comp-1",
+      user_id: "user-1",
+      ceo_agent_id: "ceo-1",
+      goal: "Expand to Europe",
+      requested_outcome: null,
+      priority: "high",
+      status: "proposed",
+      reasoning_summary: "Decomposition summary",
+      context_snapshot: {},
+      plan_steps: [],
+      delegation_proposals: [],
+      approval_requirements: [],
+      risks: [],
+      assumptions: [],
+      created_at: "2026-09-21T00:00:00Z",
+      updated_at: "2026-09-21T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockDetail,
+    } as Response);
+
+    const res = await api.getPlan("comp-1", "plan-1");
+    expect(res.id).toBe("plan-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/ceo/plans/plan-1",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      })
+    );
   });
 
   it("throws ApiError when response is not ok", async () => {

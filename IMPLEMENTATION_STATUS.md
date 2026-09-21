@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 4 — Agent Registry** (COMPLETE)
+**Phase 5 — CEO Orchestrator Foundation** (COMPLETE)
 
 ---
 
@@ -193,20 +193,81 @@
   * Backend Integration Tests (`tests/integration/test_api_agent.py`): Complete end-to-end API lifecycle and cross-tenant isolation tests.
   * Frontend Tests (`apps/web/lib/api.test.ts`): Unit tests covering all agent API client functions.
 
+### Phase 5 — CEO Orchestrator Foundation (COMPLETE)
+* **Domain & Orchestration Layer:**
+  * Defined CEO domain exceptions in `domain/ceo/exceptions.py` (`CeoNotFoundError`, `CeoAccessDeniedError`, `PlanNotFoundError`, `InvalidGoalError`, `InvalidPlanGraphError`, `PlanDepthExceededError`).
+  * Defined strongly-typed Pydantic orchestration models in `orchestration/planner/schemas.py`:
+    * `GoalIntake`: Structured goal input (`objective`, `requested_outcome`, `constraints`, `priority`, `requirements`).
+    * `PlanStep`: Discrete task graph node (`step_id`, `title`, `description`, `assigned_agent_id`, `assigned_agent_role`, `department_code`, `depends_on`, `required_capabilities`, `expected_output`, `verification_criteria`).
+    * `DelegationProposal`: Typed delegation proposal (`proposal_id`, `source_agent_id`, `target_agent_id`, `target_role`, `objective`, `scope`, `expected_output`, `required_capabilities`, `constraints`, `authority_level_required`).
+    * `ApprovalRequirement`: Mandatory governance approval gate (`step_id`, `action_description`, `risk_level`, `reason_for_approval`).
+    * `PlanResult`: Unified structured plan proposal with audit-safe reasoning summaries, DAG steps, delegation proposals, risks, and assumptions.
+  * Built DAG validation engine in `orchestration/planner/dag_validator.py`:
+    * Cycle detection via Kahn's algorithm (topological sort).
+    * Self-dependency rejection (`step.step_id in step.depends_on`).
+    * Missing dependency rejection (all references must resolve within plan).
+    * Company agent validation (assigned agents must exist in company active registry).
+    * Bounded safety limits enforcement (`MAX_PLAN_STEPS = 20`, `MAX_DEPENDENCY_DEPTH = 5`).
+* **Provider-Agnostic LLM Gateway (`infrastructure/llm/`):**
+  * `BaseLLMProvider`: Abstract provider contract for structured plan generation.
+  * `DeterministicPlannerProvider`: Fast, 100% reproducible planning provider for deterministic decomposition, offline development, and CI/CD execution.
+  * `LLMGateway`: Decouples application services from model providers and strictly validates provider output against DAG constraints before returning.
+* **Authoritative Persistence (`infrastructure/database/models.py`):**
+  * Defined `CeoPlan` model (`ceo_plans` table):
+    * Columns: `id`, `company_id` (FK), `user_id` (FK), `ceo_agent_id` (FK nullable), `goal`, `requested_outcome`, `priority`, `status` (`proposed`, `under_review`, `rejected`, `superseded`), `reasoning_summary`, `context_snapshot`, `plan_steps`, `delegation_proposals`, `approval_requirements`, `risks`, `assumptions`, `created_at`, `updated_at`.
+    * Indexes: `ix_ceo_plans_company_created`, `ix_ceo_plans_company_status`.
+  * Alembic Migration `database/migrations/versions/0005_create_ceo_plans.py`:
+    * Revision ID `0005_create_ceo_plans` (21 characters, <= 32-char limit).
+    * Applied and verified with reversible downgrade/re-upgrade.
+    * `alembic check`: 0 schema drift detected.
+* **Application Services (`application/services/ceo_service.py`):**
+  * `CeoService` orchestrates CEO operations with multi-tenant company isolation:
+    * `get_company_ceo`: Resolves authoritative CEO agent record (`role="ceo"` or `"Chief Executive Officer"`).
+    * `get_ceo_context`: Assembles live PostgreSQL state (company profile, departments, registered agents, declared capabilities, tools, active definition models).
+    * `generate_plan`: Validates goal, gathers context, delegates to `LLMGateway`, verifies DAG constraints, and persists plan proposal with status `"proposed"`.
+    * `list_plans`: Lists historical company plan proposals.
+    * `get_plan`: Retrieves specific plan detail and DAG.
+* **API Layer (`apps/api/routes/ceo.py`):**
+  * Endpoints mounted at `/api/v1/companies/{company_id}/ceo`:
+    * `GET /context` — Authoritative CEO company context and resolved identity (HTTP 200).
+    * `POST /plan` — Submit goal, generate structured plan and DAG proposal (HTTP 201).
+    * `GET /plans` — List historical company plans (HTTP 200).
+    * `GET /plans/{plan_id}` — Retrieve full plan proposal details (HTTP 200).
+* **Frontend UI & Dashboard Integration:**
+  * Transformed `/ceo` placeholder into the authoritative **CEO Command Center** (`apps/web/app/ceo/page.tsx`):
+    * CEO Identity banner displaying active CEO agent, Authority Level 5, and planning mode.
+    * Missing CEO warning banner directing users to `/agents` if unprovisioned.
+    * Strategic Goal Intake command box with objective, outcome, priority, and constraints.
+    * Prominent proposal banner: `"PROPOSAL ONLY — This plan is an executive recommendation awaiting human governance approval."`
+    * Visual Task Graph (DAG) viewer showing steps, dependencies, assigned roles, capabilities, and verification criteria.
+    * Typed Delegation Proposals table.
+    * Mandatory Governance Approval Gates & Risk Analysis matrix.
+    * Plan Proposals History sidebar with instant inspection.
+  * Dashboard Integration (`apps/web/app/page.tsx`):
+    * TopBar updated to `Operational · Phase 5 Active`.
+    * Active Operations panel displays live CEO planning status (`${planCount} strategic plan proposals synthesized`).
+    * Active Agents metric maintained at honest `0` runtime active (`${agentCount} registered (0 runtime active)`).
+    * Organization telemetry displays `${departmentCount} Depts · ${agentCount} Agents · ${planCount} Plans`.
+* **Testing & Quality Assurance:**
+  * Added 10 unit tests in `tests/unit/test_planner_dag.py` covering valid DAGs, self-dependencies, 2-node cycles, multi-node cycles, missing dependencies, foreign agent IDs, max steps, and max depth.
+  * Added 7 unit tests in `tests/unit/test_ceo_service.py` covering CEO resolution, context assembly, plan generation, isolation, goal validation, and plan retrieval.
+  * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_ceo.py`.
+  * Added 4 frontend client unit tests in `apps/web/lib/api.test.ts`.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (30 passed in 4.72s) |
+| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (47 passed in 5.61s) |
 | **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (75 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (67 files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web run test` | **PASSED** (12 tests in 2 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (92 files compliant) |
+| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (84 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (16 tests in 2 files in 262ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`, `0002`, `0003`, `0004` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0005` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
 | **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
 
@@ -214,28 +275,28 @@
 
 ## Important Architectural Decisions
 
-1. **Explicit Membership Model vs Owner Conflation:**
-   Users and companies are connected via `CompanyMember` association records with roles (`owner`, `admin`, `member`). This ensures the system does not assume `user == company owner` and lays the foundation for role-based governance.
-2. **Backend-Enforced Company Isolation:**
-   Multi-company isolation is enforced at the database query level: all company-scoped queries filter by `company_id` and explicitly verify membership (`CompanyMember.user_id == current_user.id`). Frontend filters are never trusted for isolation.
-3. **Registry Status vs Runtime Presence:**
-   Registry status (`active`, `inactive`, `archived`) represents organizational readiness in the registry, while runtime presence (`working`, `idle`, `offline`) represents real-time agent execution state. Phase 4 strictly manages registry status; runtime presence is kept honestly at `0` until Phase 14 (Agent Presence).
-4. **Immutable Definition History (Rule 129):**
-   Agent prompts, models, capabilities, and tool declarations are stored as versioned `AgentDefinition` records (`agent_id, version`). Updates create new versions rather than mutating old records, providing auditability and rollback capability.
-5. **Organizational Hierarchy & Cycle Prevention:**
-   Agents maintain a `reports_to` self-reference forming a directed tree/DAG within the company. An automated cycle detection algorithm runs in `AgentService` before any hierarchy change is committed, preventing self-reporting and circular management chains.
-6. **No Mock Execution Loops:**
-   Phase 4 defines what agents exist, their roles, and their capabilities, but strictly does not execute work. No fake background runners, simulated LLM completions, or fake tasks were introduced.
+1. **CEO Planning / Proposal State != Task Execution State:**
+   The CEO produces structured plan proposals, dependency DAGs, and delegation proposals. No execution engine, background workers, or task runners are introduced in Phase 5. All proposals remain in `"proposed"` status awaiting future human governance or task engine integration (Phase 6+).
+2. **Registered Agent State != Runtime Agent State:**
+   Registered agents in PostgreSQL represent organizational readiness, role definitions, and capability declarations. Runtime agent state (`working`, `idle`, `offline`) is kept strictly at `0` until Phase 14 (Agent Presence).
+3. **Recommendation vs Decision Distinction:**
+   The CEO cannot authorize its own plans or execute irreversible actions. Steps requiring governance approval generate explicit `ApprovalRequirement` gates with risk levels.
+4. **Provider-Agnostic LLM Gateway:**
+   The application service depends on `LLMGateway`, not a specific model vendor. `DeterministicPlannerProvider` provides fast, offline, and 100% reproducible test verification, while allowing seamless integration of commercial LLM adapters.
+5. **Strict DAG Safety Bounds:**
+   Plans are bounded to maximum 20 steps and maximum 5 dependency levels to prevent infinite loops, deep recursion, or unmanageable orchestration graphs.
+6. **Backend-Enforced Company Isolation:**
+   All CEO operations verify company membership at the database level. Cross-company agent assignments or context leaks are strictly rejected.
 
 ---
 
 ## Known Risks & Issues
 
-* **Distributed Multi-Tenancy:** In future phases with high-concurrency background workers (e.g. Phase 5 CEO Orchestrator), company context must be explicitly passed through task payloads or async contextvars to prevent cross-company data leakage during async job processing.
+* **Asynchronous LLM Latency in Production:** When external commercial LLMs are configured in production, plan synthesis may take 5–15 seconds. Future phases should support asynchronous task dispatch with progress notifications.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 5 — CEO Orchestrator Foundation**
+**Phase 6 — Projects & Basic Tasks**
 *(Awaiting user authorization before proceeding).*
