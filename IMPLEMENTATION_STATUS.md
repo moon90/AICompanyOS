@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 3 — Company & Organization** (COMPLETE)
+**Phase 4 — Agent Registry** (COMPLETE)
 
 ---
 
@@ -59,20 +59,12 @@
     * `Agent Registry` (`/agents`) [Phase 4 roadmap badge]
     * `Projects` (`/projects`) [Phase 6 roadmap badge]
     * `Tasks` (`/tasks`) [Phase 6 roadmap badge]
-    * `Approvals` (`/approvals`) [Phase 10 roadmap badge]
-    * `Activity` (`/activity`) [Phase 13 roadmap badge]
-    * `Settings` (`/settings`) [Phase 23 roadmap badge]
-  * Built `TopBar.tsx` featuring breadcrumbs, live system operational status badge, command palette placeholder (`⌘K Quick Find`), notifications panel with unread indicator, and authenticated operator profile dropdown with explicit Sign Out trigger.
-  * Built `ShellLayout.tsx` providing responsive drawer management, session verification against `/api/v1/auth/me`, and executive loading skeleton states.
+    * `Approvals` (`/approvals`) [Phase 7 roadmap badge]
+    * `Activity` (`/activity`) [Phase 10 roadmap badge]
+    * `Settings` (`/settings`) [Phase 0 foundational settings]
+  * Built `TopBar.tsx` featuring real system operational telemetry badge (`Operational · Phase 4 Active`), company indicator, and authenticated user profile menu with logout flow.
+  * Built `Shell.tsx` responsive layout coordinator with mobile hamburger toggle and content wrapping.
 * **Executive Dashboard (`apps/web/app/page.tsx`):**
-  * Implemented 5 Metric Cards per `docs/Phases.md` § 6:
-    * Active Projects: `0` (Annotated: "No active projects — Scheduled for Phase 3/6")
-    * Open Tasks: `0` (Annotated: "No open tasks — Scheduled for Phase 6")
-    * Blocked Tasks: `0` (Annotated: "No blocked tasks")
-    * Pending Approvals: `0` (Annotated: "No pending approvals — Scheduled for Phase 10")
-    * Active Agents: `0` (Annotated: "No active agents — Scheduled for Phase 4")
-  * Implemented Active Operations Panel with honest empty state:
-    * Icon, title, and descriptive text explaining CEO orchestration activates in Phase 5.
   * Implemented Recent Activity Panel with honest empty state:
     * Icon, title, and descriptive text explaining real-time event streaming activates in Phase 13.
   * Implemented System Foundation & Infrastructure Telemetry Panel:
@@ -148,20 +140,73 @@
   * Added comprehensive lifecycle & multi-company isolation integration test in `tests/integration/test_api_company.py`.
   * Verified 22/22 backend tests passing, 8/8 frontend tests passing, 100% type safety in strict mode.
 
+### Phase 4 — Agent Registry (COMPLETE)
+* **Domain Layer:**
+  * Defined agent domain exceptions in `domain/agents/exceptions.py` (`AgentNotFoundError`, `AgentAccessDeniedError`, `InvalidAgentHierarchyError`, `InvalidAgentDepartmentError`, `DuplicateAgentVersionError`, `InvalidAgentDataError`).
+* **Authoritative Persistence:**
+  * Defined `Agent` model in `infrastructure/database/models.py`:
+    * Fields: `id`, `company_id`, `department_id`, `name`, `role`, `type` (`executive`, `manager`, `specialist`, `worker`), `reports_to` (self-referencing foreign key), `mission`, `status` (`active`, `inactive`, `archived`), `authority_level` (1–5), `created_at`, `updated_at`.
+    * Foreign keys with indexes: `company_id` (cascade delete), `department_id` (restrict delete), `reports_to` (set null on delete).
+    * Compound indexes for fast filtered lookups: `ix_agents_company_status`, `ix_agents_company_department`.
+  * Defined `AgentDefinition` model in `infrastructure/database/models.py`:
+    * Versioned snapshot preserving prompt and capability history per Rule 129 (`cmo@1.0`, `cmo@1.1`).
+    * Fields: `id`, `agent_id`, `version`, `system_prompt`, `model`, `capabilities` (JSON), `tools` (JSON), `configuration` (JSON), `is_current` (boolean), `created_at`.
+    * Unique constraint: `(agent_id, version)` ensuring no version overwriting.
+    * Partial / composite index: `ix_agent_definitions_agent_current`.
+  * Alembic Migration `database/migrations/versions/0004_create_agent_registry.py`:
+    * Revision ID `0004_create_agent_registry` (26 chars, strictly compliant with PostgreSQL 32-char alembic limit).
+    * Applied cleanly with reversible downgrade and re-upgrade testing.
+    * Verified with `alembic check`: 0 schema drift detected.
+* **Application Services (`application/services/agent_service.py`):**
+  * `AgentService` strictly enforces multi-tenant boundary checks via `_verify_membership`.
+  * Cross-company department validation: validates `department.company_id == agent.company_id`.
+  * Cross-company manager validation: validates `manager.company_id == agent.company_id`.
+  * Directed acyclic graph (DAG) cycle detection prevents self-cycles, 2-agent cycles, and multi-agent reporting loops.
+  * `create_agent` automatically snapshots `AgentDefinition` version `1.0` with `is_current=True`.
+  * `update_agent` updates organizational attributes and safely updates hierarchy references.
+  * `create_agent_definition` creates new versions and automatically demotes previous current versions (`is_current=False`).
+  * `provision_default_agents` automatically seeds the 11 foundational organization agents specified in `docs/Phases.md` § 8 (CEO, CTO, Software Architect, Full Stack Engineer, CMO, Marketing Strategist, Copywriter, Sales Director, Lead Researcher, Sales Analyst, Executive Assistant).
+* **API Layer (`apps/api/routes/agent.py`):**
+  * Thin route handlers mounted under `/api/v1/companies/{company_id}/agents`:
+    * `GET /` — List agents with optional department, type, and status filtering.
+    * `POST /` — Register new agent with initial definition.
+    * `POST /provision-defaults` — Provision foundational 11 agents.
+    * `GET /{agent_id}` — Get agent details including current definition and reporting line.
+    * `PATCH /{agent_id}` — Update agent organizational attributes.
+    * `GET /{agent_id}/definitions` — List definition version history.
+    * `POST /{agent_id}/definitions` — Publish new versioned agent definition.
+* **Frontend UI & Dashboard Integration:**
+  * Replaced `PhaseBoundaryCard` at `/agents` with the authoritative Agent Registry Workspace:
+    * Search & filter controls by department, agent type, and registry status.
+    * Clear distinction between Registry Status (`active`, `inactive`, `archived`) and Runtime Presence (`0 runtime active`).
+    * Agent cards displaying name, role, department, manager, model, version, authority level, and mission.
+    * Interactive Agent Detail Drawer showing full hierarchy, declared capabilities, tools, system prompt, and version history.
+    * "New Version" form directly inside drawer to evolve agent definitions per Rule 129.
+    * "Register Agent" modal with complete validation and department selection.
+    * "Provision Default Organization" action for 1-click foundational agent seeding.
+  * Dashboard Integration (`apps/web/app/page.tsx`):
+    * Real registered agent count displayed from PostgreSQL.
+    * Active Agents card preserves honest `0` runtime presence with explicit note that the execution loop begins in Phase 5.
+    * TopBar telemetry updated to `Phase 4 Active`.
+* **Testing & Quality Assurance:**
+  * Backend Unit Tests (`tests/unit/test_agent_service.py`): 7 comprehensive tests covering creation, validation, cross-company isolation, cycle prevention, versioning, and default provisioning.
+  * Backend Integration Tests (`tests/integration/test_api_agent.py`): Complete end-to-end API lifecycle and cross-tenant isolation tests.
+  * Frontend Tests (`apps/web/lib/api.test.ts`): Unit tests covering all agent API client functions.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (22 passed in 3.84s) |
+| **Backend Unit & Integration Tests** | `pytest -v` | **PASSED** (30 passed in 4.72s) |
 | **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (67 files compliant) |
-| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (59 files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web run test` | **PASSED** (8 tests in 2 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (75 files compliant) |
+| **Python Static Type Checking** | `mypy .` (strict mode) | **PASSED** (67 files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web run test` | **PASSED** (12 tests in 2 files) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (14 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`, `0002`, `0003` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`, `0002`, `0003`, `0004` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
 | **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
 
@@ -173,12 +218,14 @@
    Users and companies are connected via `CompanyMember` association records with roles (`owner`, `admin`, `member`). This ensures the system does not assume `user == company owner` and lays the foundation for role-based governance.
 2. **Backend-Enforced Company Isolation:**
    Multi-company isolation is enforced at the database query level: all company-scoped queries filter by `company_id` and explicitly verify membership (`CompanyMember.user_id == current_user.id`). Frontend filters are never trusted for isolation.
-3. **Department vs Agent Boundary:**
-   Per `docs/Phases.md`, a department is a business organizational entity, whereas an agent is an execution entity. No mock agent records were created in Phase 3; departments only reference leadership roles (e.g., `CTO`, `CMO`), and Agent Registry remains strictly scoped to Phase 4.
-4. **Authoritative Department Provisioning:**
-   When establishing a new company, `CompanyService` automatically provisions the 5 required default departments (`CTO`, `CMO`, `Sales`, `Finance`, `Operations`), providing immediate organizational structure without manual boilerplating.
-5. **Honest Metric Integrity:**
-   The Executive Dashboard integrates real company data (name, mission, department count) while preserving honest zero states for unreached phases (agents in Phase 4, projects/tasks in Phase 6).
+3. **Registry Status vs Runtime Presence:**
+   Registry status (`active`, `inactive`, `archived`) represents organizational readiness in the registry, while runtime presence (`working`, `idle`, `offline`) represents real-time agent execution state. Phase 4 strictly manages registry status; runtime presence is kept honestly at `0` until Phase 12.
+4. **Immutable Definition History (Rule 129):**
+   Agent prompts, models, capabilities, and tool declarations are stored as versioned `AgentDefinition` records (`agent_id, version`). Updates create new versions rather than mutating old records, providing auditability and rollback capability.
+5. **Organizational Hierarchy & Cycle Prevention:**
+   Agents maintain a `reports_to` self-reference forming a directed tree/DAG within the company. An automated cycle detection algorithm runs in `AgentService` before any hierarchy change is committed, preventing self-reporting and circular management chains.
+6. **No Mock Execution Loops:**
+   Phase 4 defines what agents exist, their roles, and their capabilities, but strictly does not execute work. No fake background runners, simulated LLM completions, or fake tasks were introduced.
 
 ---
 
@@ -190,5 +237,5 @@
 
 ## Next Authorized Phase
 
-**Phase 4 — Agent Registry**
+**Phase 5 — CEO Orchestrator Foundation**
 *(Awaiting user authorization before proceeding).*

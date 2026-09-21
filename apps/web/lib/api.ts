@@ -62,6 +62,55 @@ export interface CompanyMember {
   created_at: string;
 }
 
+export interface AgentDefinition {
+  id: string;
+  agent_id: string;
+  version: string;
+  system_prompt: string | null;
+  model: string;
+  capabilities: string[];
+  tools: string[];
+  configuration: Record<string, unknown>;
+  is_current: boolean;
+  created_at: string;
+}
+
+export interface Agent {
+  id: string;
+  company_id: string;
+  department_id: string | null;
+  department: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
+  name: string;
+  role: string;
+  type: string;
+  reports_to: string | null;
+  manager: {
+    id: string;
+    name: string;
+    role: string;
+  } | null;
+  mission: string | null;
+  status: string;
+  authority_level: string;
+  created_at: string;
+  updated_at: string;
+  current_definition: AgentDefinition | null;
+}
+
+export interface AgentDetail extends Agent {
+  definitions: AgentDefinition[];
+  subordinates: Array<{
+    id: string;
+    name: string;
+    role: string;
+    status: string;
+  }>;
+}
+
 export interface ApiError {
   detail: string;
   status: number;
@@ -231,5 +280,115 @@ export const api = {
     return request<CompanyMember[]>(`/api/v1/companies/${companyId}/members`, {
       method: "GET",
     });
+  },
+
+  async getAgents(
+    companyId: string,
+    params?: { department_id?: string; status?: string }
+  ): Promise<Agent[]> {
+    const query = new URLSearchParams();
+    if (params?.department_id) query.set("department_id", params.department_id);
+    if (params?.status) query.set("status", params.status);
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return request<Agent[]>(`/api/v1/companies/${companyId}/agents${qs}`, {
+      method: "GET",
+    });
+  },
+
+  async getAgent(companyId: string, agentId: string): Promise<AgentDetail> {
+    return request<AgentDetail>(
+      `/api/v1/companies/${companyId}/agents/${agentId}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async createAgent(
+    companyId: string,
+    data: {
+      name: string;
+      role: string;
+      type?: string;
+      department_id?: string | null;
+      reports_to?: string | null;
+      mission?: string;
+      authority_level?: string;
+      system_prompt?: string;
+      model?: string;
+      capabilities?: string[];
+      tools?: string[];
+      configuration?: Record<string, unknown>;
+    }
+  ): Promise<Agent> {
+    return request<Agent>(`/api/v1/companies/${companyId}/agents`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateAgent(
+    companyId: string,
+    agentId: string,
+    data: {
+      name?: string;
+      role?: string;
+      type?: string;
+      department_id?: string | null;
+      reports_to?: string | null;
+      mission?: string;
+      status?: string;
+      authority_level?: string;
+    }
+  ): Promise<Agent> {
+    return request<Agent>(
+      `/api/v1/companies/${companyId}/agents/${agentId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async provisionDefaultAgents(companyId: string): Promise<Agent[]> {
+    return request<Agent[]>(
+      `/api/v1/companies/${companyId}/agents/provision-defaults`,
+      {
+        method: "POST",
+      }
+    );
+  },
+
+  async createAgentDefinition(
+    companyId: string,
+    agentId: string,
+    data: {
+      version: string;
+      system_prompt?: string;
+      model?: string;
+      capabilities?: string[];
+      tools?: string[];
+      configuration?: Record<string, unknown>;
+    }
+  ): Promise<AgentDefinition> {
+    return request<AgentDefinition>(
+      `/api/v1/companies/${companyId}/agents/${agentId}/definitions`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async getAgentDefinitions(
+    companyId: string,
+    agentId: string
+  ): Promise<AgentDefinition[]> {
+    return request<AgentDefinition[]>(
+      `/api/v1/companies/${companyId}/agents/${agentId}/definitions`,
+      {
+        method: "GET",
+      }
+    );
   },
 };

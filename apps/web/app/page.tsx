@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [departmentCount, setDepartmentCount] = useState<number>(0);
+  const [agentCount, setAgentCount] = useState<number>(0);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -43,13 +44,19 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const depts = await api.getDepartments(primaryCompany.id);
+          const [depts, ags] = await Promise.all([
+            api.getDepartments(primaryCompany.id).catch(() => []),
+            api.getAgents(primaryCompany.id).catch(() => []),
+          ]);
           setDepartmentCount(depts.length);
+          setAgentCount(ags.length);
         } catch {
           setDepartmentCount(0);
+          setAgentCount(0);
         }
       } else {
         setDepartmentCount(0);
+        setAgentCount(0);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -107,8 +114,8 @@ export default function DashboardPage() {
     {
       title: "Active Agents",
       value: "0",
-      subtext: "No active agents",
-      phaseNote: "Scheduled for Phase 4",
+      subtext: agentCount > 0 ? `${agentCount} registered (0 runtime active)` : "No active agents",
+      phaseNote: "Execution loop scheduled for Phase 5",
       icon: Users,
       accentColor: "text-emerald-400",
       bgColor: "bg-emerald-500/10",
@@ -127,7 +134,7 @@ export default function DashboardPage() {
                 {activeCompany ? activeCompany.name : "Executive Dashboard"}
               </h1>
               <span className="text-xs font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                Phase 3 Active
+                Phase 4 Active
               </span>
               {activeCompany?.industry && (
                 <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
@@ -378,7 +385,7 @@ export default function DashboardPage() {
                 <span className="truncate">{activeCompany ? activeCompany.name : "Unassigned"}</span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
-                {activeCompany ? `${departmentCount} Departments Active` : "Phase 3 Ready"}
+                {activeCompany ? `${departmentCount} Depts · ${agentCount} Agents Registered` : "Phase 4 Ready"}
               </p>
             </div>
           </div>
