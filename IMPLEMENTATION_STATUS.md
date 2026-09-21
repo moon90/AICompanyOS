@@ -219,7 +219,7 @@
 2. **Backend-Enforced Company Isolation:**
    Multi-company isolation is enforced at the database query level: all company-scoped queries filter by `company_id` and explicitly verify membership (`CompanyMember.user_id == current_user.id`). Frontend filters are never trusted for isolation.
 3. **Registry Status vs Runtime Presence:**
-   Registry status (`active`, `inactive`, `archived`) represents organizational readiness in the registry, while runtime presence (`working`, `idle`, `offline`) represents real-time agent execution state. Phase 4 strictly manages registry status; runtime presence is kept honestly at `0` until Phase 12.
+   Registry status (`active`, `inactive`, `archived`) represents organizational readiness in the registry, while runtime presence (`working`, `idle`, `offline`) represents real-time agent execution state. Phase 4 strictly manages registry status; runtime presence is kept honestly at `0` until Phase 14 (Agent Presence).
 4. **Immutable Definition History (Rule 129):**
    Agent prompts, models, capabilities, and tool declarations are stored as versioned `AgentDefinition` records (`agent_id, version`). Updates create new versions rather than mutating old records, providing auditability and rollback capability.
 5. **Organizational Hierarchy & Cycle Prevention:**
