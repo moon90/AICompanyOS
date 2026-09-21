@@ -15,6 +15,7 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "aiosqlite>=0.20.0",
     "greenlet>=3.1.0",
+    "bcrypt>=4.0.0",
 ]
 
 [project.optional-dependencies]

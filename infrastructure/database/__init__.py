@@ -1,7 +1,7 @@
 """Database infrastructure package."""
 
 from infrastructure.database.base import Base
-from infrastructure.database.models import SystemMetadata
+from infrastructure.database.models import SystemMetadata, User, UserSession
 from infrastructure.database.session import (
     async_engine,
     async_session_factory,
@@ -16,6 +16,8 @@ from infrastructure.database.session import (
 __all__ = [
     "Base",
     "SystemMetadata",
+    "User",
+    "UserSession",
     "async_engine",
     "async_session_factory",
     "check_database_connection",

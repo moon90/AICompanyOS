@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # Redis URL
     redis_url: str = "redis://localhost:6379/0"
 
+    # Authentication & Session Settings
+    session_expire_days: int = 7
+    session_cookie_name: str = "ai_company_session"
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_seconds: int = 900
+    cookie_secure: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

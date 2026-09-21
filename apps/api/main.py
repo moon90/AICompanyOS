@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.routes.auth import router as auth_router
 from apps.api.routes.health import router as health_router
 from infrastructure.config import Settings, get_settings
+from infrastructure.security.rate_limiter import LoginRateLimiter
 
 
 @asynccontextmanager
@@ -29,6 +31,10 @@ def create_application(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.settings = app_settings
+    application.state.rate_limiter = LoginRateLimiter(
+        max_attempts=app_settings.login_rate_limit_attempts,
+        window_seconds=app_settings.login_rate_limit_window_seconds,
+    )
 
     # CORS configuration
     application.add_middleware(
@@ -41,6 +47,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
 
     # Register routers
     application.include_router(health_router)
+    application.include_router(auth_router)
 
     return application
 
