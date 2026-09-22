@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 8 — Agent Runtime (Agent Execution Engine)** (COMPLETE)
+**Phase 10 — Approval & Oversight System** (COMPLETE)
 
 ---
 
@@ -449,37 +449,72 @@
   * Added comprehensive lifecycle & isolation integration test in `tests/integration/test_api_tools.py`.
   * Added 3 frontend client unit tests in `apps/web/lib/api.test.ts`.
 
+### Phase 10 — Approval & Oversight System (COMPLETE)
+* **Domain Layer (`domain/approvals/`):**
+  * `schemas.py`: Created authoritative enumerations `ApprovalStatus` (`PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`), `ApprovalActionType` (`SEND_EMAIL`, `PUBLISH_CONTENT`, `SPEND_MONEY`, `DELETE_DATA`, `DEPLOY_PRODUCTION`, `MODIFY_CONFIGURATION`, `EXTERNAL_COMMUNICATION`, `TOOL_EXECUTION`, `DATABASE_MIGRATION`, `HIGH_RISK_ACTION`), `ApprovalRiskLevel` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), `ApprovalDecision` (`APPROVED`, `REJECTED`), and Pydantic schemas `ApprovalRequestCreate`, `ApprovalDecisionInput`, and `ApprovalFilter`.
+  * `exceptions.py`: Defined domain exceptions `ApprovalError`, `ApprovalNotFoundError`, `ApprovalAlreadyProcessedError`, `ApprovalAccessDeniedError`, `InvalidApprovalTransitionError`, and `AgentCannotApproveError`.
+  * `state_machine.py`: Implemented `ApprovalStateMachine` enforcing valid transitions from `PENDING` to terminal states (`APPROVED`, `REJECTED`, `CANCELLED`) and permanently rejecting state tampering once terminal.
+  * `policy_engine.py`: Implemented `ApprovalPolicyEngine` identifying consequential actions, evaluating tool-level gate requirements, enforcing financial spend thresholds, and strictly barring automated agents from reviewing approvals per docs/Rules.md § 42.
+* **Database & Persistence:**
+  * Added `ApprovalRequest` entity in `infrastructure/database/models.py` with foreign keys to `companies.id`, `tasks.id`, `agents.id`, `execution_records.id`, `tool_execution_records.id`, and `users.id` (reviewer).
+  * Configured compound indexes `ix_approval_requests_company_status` and `ix_approval_requests_company_created`.
+  * Authored Alembic migration `database/migrations/versions/0010_create_approval_system.py`, applied migration `0010`, validated bidirectional rollback, and verified 0 schema drift with `alembic check`.
+* **Application Services:**
+  * Built `ApprovalService` in `application/services/approval_service.py` managing `create_approval`, `list_approvals`, `get_approval`, `approve_request` (with automatic tool execution resumption and task state unblocking), and `reject_request` (with permanent blocking).
+  * Updated `ToolService.execute_tool` in `application/services/tool_service.py` to automatically instantiate a `PENDING` `ApprovalRequest` and set task status to `APPROVAL_REQUIRED` whenever an action halts with `APPROVAL_REQUIRED` or `requires_approval=True`.
+  * Enhanced `ToolGateway` in `tools/gateway/gateway.py` with `execute_approved` for clean post-approval adapter resumption.
+  * Updated `SystemService` to report `CURRENT_PHASE = "Phase 10 — Approval System"`.
+* **API Layer (`apps/api/`):**
+  * Created Pydantic response schemas `ApprovalRequestResponse`, `ApprovalListResponse`, and `ApprovalDecisionRequest` in `apps/api/schemas/approval.py`.
+  * Built RESTful route handlers in `apps/api/routes/approval.py`:
+    * `GET /api/v1/companies/{company_id}/approvals` (listing with status, risk level, agent filters and pagination)
+    * `GET /api/v1/companies/{company_id}/approvals/{approval_id}` (detailed inspection)
+    * `POST /api/v1/companies/{company_id}/approvals/{approval_id}/approve` (human operator approval and execution release)
+    * `POST /api/v1/companies/{company_id}/approvals/{approval_id}/reject` (human operator rejection and permanent block)
+  * Registered router in `apps/api/main.py`.
+* **Frontend UI Console (`apps/web/`):**
+  * Updated `apps/web/lib/api.ts` with TypeScript interfaces `ApprovalRequest`, `ApprovalListResponse`, `ApprovalDecisionRequest` and API client methods `getApprovals`, `getApproval`, `approveRequest`, `rejectRequest`.
+  * Replaced placeholder with full-featured Human Oversight & Approval Console in `apps/web/app/approvals/page.tsx`:
+    * Live telemetry metric cards (Pending Actions, High/Critical Risk count, Total Approved, Total Rejected).
+    * Filter bar with real-time status tabs and risk tier dropdown.
+    * Interactive cards with status badges, risk indicators, agent/task attribution, and action descriptions.
+    * Slide-over details drawer showing full JSON payload, audit timestamps, and reviewer rationale.
+    * Authorize & Execute / Permanently Block decision modal with reviewer justification capture.
+  * Updated `apps/web/app/page.tsx` Dashboard with live pending approvals count and alert badge.
+  * Added 3 web client unit tests in `apps/web/lib/api.test.ts`.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (106 passed in 11.79s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across all files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (107 files compliant) |
-| **Python Static Type Checking** | `mypy domain/ application/ tools/ apps/api/` | **PASSED** (72 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (25 tests in 2 files in 295ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (121 passed in 12.59s) |
+| **Approval Domain & Service Tests** | `pytest tests/unit/test_approval*.py tests/integration/test_api_approval.py` | **PASSED** (15 tests in 1.47s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 155 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (155 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (154 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (28 tests in 2 files in 263ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (15 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0009` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0010` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
-| **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, session validation, route protection) |
+| **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, human-only approvals, agent rejection enforcement) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **Tool Gateway Security Boundary Enforced in Code:**
-   No agent has direct access to external APIs or network endpoints. All interactions are strictly funneled through the 8-step Tool Gateway pipeline: parameter sanitization $\to$ registry lookup $\to$ schema validation $\to$ permission check $\to$ risk evaluation $\to$ approval check $\to$ adapter execution $\to$ output normalization.
-2. **Approval Gate Interception:**
-   Actions requiring approval (`HIGH`/`CRITICAL` risk or `requires_approval = True`) are halted immediately by the gateway with status `APPROVAL_REQUIRED` and duration metrics recorded. Live execution is prevented until Phase 10 approval workflow is integrated.
-3. **Automated Secret Sanitization:**
-   Before persisting or logging input parameters, `ToolValidator` scrubs sensitive credentials (API keys, GitHub tokens, bearer headers, passwords) using regular expression patterns.
-4. **Normalized Domain Output Contracts:**
-   Tools return strongly-typed domain packets (`SearchResult`, `DocumentContent`, `GitHubResult`), preventing messy raw external payloads from polluting agent contexts.
-5. **Immutable Tool Execution Audit Trail (`ToolExecutionRecord`):**
-   Every invocation is permanently recorded in PostgreSQL with foreign keys cascading to company, agent, optional task, and optional execution record.
+1. **Human-Only Authority Enforcement (docs/Rules.md § 42):**
+   Agents are strictly forbidden from approving or rejecting actions for themselves or other agents. Calling approval endpoints as an agent raises `AgentCannotApproveError` and returns `403 Forbidden`.
+2. **Consequential Action Gating:**
+   All actions designated as consequential (`SEND_EMAIL`, `PUBLISH_CONTENT`, `SPEND_MONEY`, `DELETE_DATA`, `DEPLOY_PRODUCTION`, `MODIFY_CONFIGURATION`, `EXTERNAL_COMMUNICATION`, `DATABASE_MIGRATION`, `HIGH_RISK_ACTION`) or classified as `HIGH`/`CRITICAL` risk automatically trigger approval interception.
+3. **Bidirectional Tool Gateway Integration:**
+   When a tool execution halts with `APPROVAL_REQUIRED`, an `ApprovalRequest` is created in PostgreSQL with `status="PENDING"`. When a human approves the request, `ApprovalService` resumes execution through `ToolGateway.execute_approved` and transitions the `ToolExecutionRecord` to `SUCCESS`. If rejected, execution is permanently marked `BLOCKED`.
+4. **Task State Synchronization:**
+   Tasks awaiting approval are moved to `TaskStatus.APPROVAL_REQUIRED`. Upon approval, tasks resume to `IN_PROGRESS`. Upon rejection, tasks transition to `BLOCKED`.
+5. **Terminal State Immutability:**
+   Once an approval request reaches `APPROVED`, `REJECTED`, or `CANCELLED`, it cannot transition to any other status. Attempting to review an already-processed approval raises `ApprovalAlreadyProcessedError` (`409 Conflict`).
 6. **Runtime Active Presence Remains 0:**
    Active agent presence and long-lived background loops remain strictly at 0, reserved for Phase 14.
 
@@ -487,7 +522,7 @@
 
 ## Next Authorized Phase
 
-**Phase 10 — Approvals & Human Oversight System**
+**Phase 11 — Audit Logging & Compliance System**
 *(Awaiting user authorization before proceeding).*
 
 

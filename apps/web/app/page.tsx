@@ -32,6 +32,7 @@ export default function DashboardPage() {
   const [projectCount, setProjectCount] = useState<number>(0);
   const [openTaskCount, setOpenTaskCount] = useState<number>(0);
   const [blockedTaskCount, setBlockedTaskCount] = useState<number>(0);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -49,13 +50,14 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const [depts, ags, plns, ctx, projs, tsks] = await Promise.all([
+          const [depts, ags, plns, ctx, projs, tsks, apprs] = await Promise.all([
             api.getDepartments(primaryCompany.id).catch(() => []),
             api.getAgents(primaryCompany.id).catch(() => []),
             api.getPlans(primaryCompany.id).catch(() => []),
             api.getCeoContext(primaryCompany.id).catch(() => null),
             api.getProjects(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
             api.getTasks(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+            api.getApprovals(primaryCompany.id, { status: "PENDING" }).catch(() => ({ items: [], total: 0 })),
           ]);
           setDepartmentCount(depts.length);
           setAgentCount(ags.length);
@@ -66,6 +68,7 @@ export default function DashboardPage() {
           const blocked = tsks.items.filter((t) => t.status === "BLOCKED");
           setOpenTaskCount(open.length);
           setBlockedTaskCount(blocked.length);
+          setPendingApprovalCount(apprs.total);
         } catch {
           setDepartmentCount(0);
           setAgentCount(0);
@@ -74,6 +77,7 @@ export default function DashboardPage() {
           setProjectCount(0);
           setOpenTaskCount(0);
           setBlockedTaskCount(0);
+          setPendingApprovalCount(0);
         }
       } else {
         setDepartmentCount(0);
@@ -83,6 +87,7 @@ export default function DashboardPage() {
         setProjectCount(0);
         setOpenTaskCount(0);
         setBlockedTaskCount(0);
+        setPendingApprovalCount(0);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -129,13 +134,16 @@ export default function DashboardPage() {
     },
     {
       title: "Pending Approvals",
-      value: "0",
-      subtext: "No pending approvals",
-      phaseNote: "Scheduled for Phase 10",
+      value: pendingApprovalCount.toString(),
+      subtext:
+        pendingApprovalCount > 0
+          ? `${pendingApprovalCount} actions require human sign-off`
+          : "0 pending approvals",
+      phaseNote: "Phase 10 Active",
       icon: ShieldAlert,
-      accentColor: "text-purple-400",
-      bgColor: "bg-purple-500/10",
-      borderColor: "border-purple-500/20",
+      accentColor: pendingApprovalCount > 0 ? "text-rose-400" : "text-amber-400",
+      bgColor: pendingApprovalCount > 0 ? "bg-rose-500/10" : "bg-amber-500/10",
+      borderColor: pendingApprovalCount > 0 ? "border-rose-500/30" : "border-amber-500/20",
     },
     {
       title: "Active Agents",

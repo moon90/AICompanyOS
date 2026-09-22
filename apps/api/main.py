@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.routes.agent import router as agent_router
+from apps.api.routes.approval import router as approval_router
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.ceo import router as ceo_router
 from apps.api.routes.company import router as company_router
@@ -66,6 +67,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(delegation_router)
     application.include_router(execution_router)
     application.include_router(tool_router)
+    application.include_router(approval_router)
 
     return application
 

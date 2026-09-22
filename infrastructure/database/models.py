@@ -91,6 +91,13 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    # Relationship to reviewed approval requests
+    reviewed_approvals: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
+        back_populates="reviewed_by_user",
+        foreign_keys="ApprovalRequest.reviewed_by_user_id",
+    )
+
 
 class UserSession(Base):
     """Authoritative user session entity stored in PostgreSQL."""
@@ -209,6 +216,11 @@ class Company(Base):
     )
     tool_execution_records: Mapped[list["ToolExecutionRecord"]] = relationship(
         "ToolExecutionRecord",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -398,6 +410,11 @@ class Agent(Base):
     )
     tool_execution_records: Mapped[list["ToolExecutionRecord"]] = relationship(
         "ToolExecutionRecord",
+        back_populates="agent",
+        cascade="all, delete-orphan",
+    )
+    approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
         back_populates="agent",
         cascade="all, delete-orphan",
     )
@@ -801,6 +818,11 @@ class Task(Base):
         cascade="all, delete-orphan",
         order_by=lambda: desc(ToolExecutionRecord.created_at),
     )
+    approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
 
 
 class TaskDependency(Base):
@@ -1022,6 +1044,11 @@ class ExecutionRecord(Base):
         back_populates="execution_record",
         cascade="all, delete-orphan",
     )
+    approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
+        back_populates="execution_record",
+        cascade="all, delete-orphan",
+    )
 
 
 Index(
@@ -1122,6 +1149,11 @@ class ToolExecutionRecord(Base):
     execution_record: Mapped["ExecutionRecord | None"] = relationship(
         "ExecutionRecord", back_populates="tool_executions"
     )
+    approval_request: Mapped["ApprovalRequest | None"] = relationship(
+        "ApprovalRequest",
+        back_populates="tool_execution",
+        uselist=False,
+    )
 
 
 Index(
@@ -1140,3 +1172,106 @@ Index(
     ToolExecutionRecord.created_at,
 )
 
+
+class ApprovalRequest(Base):
+    """Authoritative Human Approval & Oversight request entity adhering to docs/Phases.md Section 14 and docs/Architecture.md Sections 40-45."""
+
+    __tablename__ = "approval_requests"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    execution_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("execution_records.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    tool_execution_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tool_execution_records.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    risk_level: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="MEDIUM",
+        server_default="MEDIUM",
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PENDING",
+        server_default="PENDING",
+    )
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="approval_requests")
+    task: Mapped["Task | None"] = relationship("Task", back_populates="approval_requests")
+    agent: Mapped["Agent | None"] = relationship("Agent", back_populates="approval_requests")
+    execution_record: Mapped["ExecutionRecord | None"] = relationship(
+        "ExecutionRecord", back_populates="approval_requests"
+    )
+    tool_execution: Mapped["ToolExecutionRecord | None"] = relationship(
+        "ToolExecutionRecord", back_populates="approval_request"
+    )
+    reviewed_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[reviewed_by_user_id], back_populates="reviewed_approvals"
+    )
+
+
+Index("ix_approval_requests_company_status", ApprovalRequest.company_id, ApprovalRequest.status)
+Index(
+    "ix_approval_requests_company_created", ApprovalRequest.company_id, ApprovalRequest.created_at
+)

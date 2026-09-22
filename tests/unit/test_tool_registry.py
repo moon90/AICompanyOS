@@ -1,5 +1,7 @@
 """Unit tests for Tool Registry adhering to docs/Phases.md Section 13."""
 
+from typing import Any
+
 import pytest
 
 from domain.tools.exceptions import ToolNotFoundError
@@ -73,7 +75,7 @@ def test_custom_tool_registration() -> None:
         allowed_roles=["*"],
     )
 
-    async def calc_handler(action: str, parameters: dict) -> dict:
+    async def calc_handler(action: str, parameters: dict[str, Any]) -> dict[str, Any]:
         return {"result": 42}
 
     registry.register(custom_def, calc_handler)

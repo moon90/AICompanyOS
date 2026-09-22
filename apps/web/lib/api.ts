@@ -427,6 +427,38 @@ export interface ToolExecutionListResponse {
   total: number;
 }
 
+export interface ApprovalRequest {
+  id: string;
+  company_id: string;
+  task_id?: string | null;
+  agent_id?: string | null;
+  execution_id?: string | null;
+  tool_execution_id?: string | null;
+  action_type: string;
+  description: string;
+  payload: Record<string, unknown>;
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  reviewed_by_user_id?: string | null;
+  reviewed_at?: string | null;
+  decision_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  agent_name?: string | null;
+  task_title?: string | null;
+  reviewer_name?: string | null;
+  tool_name?: string | null;
+}
+
+export interface ApprovalListResponse {
+  items: ApprovalRequest[];
+  total: number;
+}
+
+export interface ApprovalDecisionRequest {
+  decision_reason?: string;
+}
+
 export interface ApiError {
   detail: string;
   status: number;
@@ -1121,5 +1153,73 @@ export const api = {
       }
     );
   },
+
+  async getApprovals(
+    companyId: string,
+    params?: {
+      status?: string;
+      risk_level?: string;
+      action_type?: string;
+      agent_id?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<ApprovalListResponse> {
+    const q = new URLSearchParams();
+    if (params?.status) q.append("status", params.status);
+    if (params?.risk_level) q.append("risk_level", params.risk_level);
+    if (params?.action_type) q.append("action_type", params.action_type);
+    if (params?.agent_id) q.append("agent_id", params.agent_id);
+    if (params?.limit) q.append("limit", params.limit.toString());
+    if (params?.offset) q.append("offset", params.offset.toString());
+    const query = q.toString() ? `?${q.toString()}` : "";
+    return request<ApprovalListResponse>(
+      `/api/v1/companies/${companyId}/approvals${query}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async getApproval(
+    companyId: string,
+    approvalId: string
+  ): Promise<ApprovalRequest> {
+    return request<ApprovalRequest>(
+      `/api/v1/companies/${companyId}/approvals/${approvalId}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  async approveRequest(
+    companyId: string,
+    approvalId: string,
+    decision?: ApprovalDecisionRequest
+  ): Promise<ApprovalRequest> {
+    return request<ApprovalRequest>(
+      `/api/v1/companies/${companyId}/approvals/${approvalId}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify(decision || {}),
+      }
+    );
+  },
+
+  async rejectRequest(
+    companyId: string,
+    approvalId: string,
+    decision?: ApprovalDecisionRequest
+  ): Promise<ApprovalRequest> {
+    return request<ApprovalRequest>(
+      `/api/v1/companies/${companyId}/approvals/${approvalId}/reject`,
+      {
+        method: "POST",
+        body: JSON.stringify(decision || {}),
+      }
+    );
+  },
 };
+
 

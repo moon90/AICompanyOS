@@ -915,6 +915,103 @@ describe("Web API Client", () => {
     );
   });
 
+  it("getApprovals returns approval requests list", async () => {
+    const mockApprovals = {
+      total: 1,
+      items: [
+        {
+          id: "appr-123",
+          company_id: "comp-1",
+          action_type: "DEPLOY_PRODUCTION",
+          description: "Deploy release v2",
+          payload: {},
+          risk_level: "CRITICAL",
+          status: "PENDING",
+          created_at: "2026-09-22T00:00:00Z",
+          updated_at: "2026-09-22T00:00:00Z",
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockApprovals,
+    } as Response);
+
+    const res = await api.getApprovals("comp-1", { status: "PENDING", risk_level: "CRITICAL" });
+    expect(res.total).toBe(1);
+    expect(res.items[0].action_type).toBe("DEPLOY_PRODUCTION");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/approvals?status=PENDING&risk_level=CRITICAL",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("approveRequest sends POST with decision payload", async () => {
+    const mockApproved = {
+      id: "appr-123",
+      company_id: "comp-1",
+      action_type: "DEPLOY_PRODUCTION",
+      description: "Deploy release v2",
+      payload: {},
+      risk_level: "CRITICAL",
+      status: "APPROVED",
+      decision_reason: "Signed off by security",
+      created_at: "2026-09-22T00:00:00Z",
+      updated_at: "2026-09-22T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockApproved,
+    } as Response);
+
+    const res = await api.approveRequest("comp-1", "appr-123", { decision_reason: "Signed off by security" });
+    expect(res.status).toBe("APPROVED");
+    expect(res.decision_reason).toBe("Signed off by security");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/approvals/appr-123/approve",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ decision_reason: "Signed off by security" }),
+      })
+    );
+  });
+
+  it("rejectRequest sends POST with decision payload", async () => {
+    const mockRejected = {
+      id: "appr-123",
+      company_id: "comp-1",
+      action_type: "DEPLOY_PRODUCTION",
+      description: "Deploy release v2",
+      payload: {},
+      risk_level: "CRITICAL",
+      status: "REJECTED",
+      decision_reason: "Security vulnerability detected",
+      created_at: "2026-09-22T00:00:00Z",
+      updated_at: "2026-09-22T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockRejected,
+    } as Response);
+
+    const res = await api.rejectRequest("comp-1", "appr-123", { decision_reason: "Security vulnerability detected" });
+    expect(res.status).toBe("REJECTED");
+    expect(res.decision_reason).toBe("Security vulnerability detected");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/approvals/appr-123/reject",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ decision_reason: "Security vulnerability detected" }),
+      })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

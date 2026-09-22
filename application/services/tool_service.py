@@ -1,5 +1,7 @@
 """Application service for Tool Gateway execution adhering to docs/Phases.md Section 13 and docs/Architecture.md Sections 30-36."""
 
+import uuid
+
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +12,10 @@ from domain.tools.exceptions import (
 )
 from domain.tools.schemas import ToolCallRequest, ToolDefinition
 from domain.work.exceptions import TaskNotFoundError
+from domain.work.state_machine import TaskStatus
 from infrastructure.database.models import (
     Agent,
+    ApprovalRequest,
     CompanyMember,
     ExecutionRecord,
     Task,
@@ -129,7 +133,9 @@ class ToolService:
 
         # 5. Persist immutable audit record in PostgreSQL
         sanitized_input = ToolValidator.sanitize_parameters(request.parameters)
+        record_id = str(uuid.uuid4())
         record = ToolExecutionRecord(
+            id=record_id,
             company_id=company_id,
             agent_id=agent.id,
             task_id=request.task_id,
@@ -145,6 +151,36 @@ class ToolService:
             duration_ms=result.duration_ms,
         )
         self.db.add(record)
+
+        # 6. Auto-generate ApprovalRequest if execution was halted for human approval
+        if result.status == "APPROVAL_REQUIRED" or result.requires_approval:
+            approval_req = ApprovalRequest(
+                company_id=company_id,
+                task_id=request.task_id,
+                agent_id=agent.id,
+                execution_id=request.execution_id,
+                tool_execution_id=record_id,
+                action_type=f"TOOL_{result.tool_name.upper()}_{result.action.upper()}",
+                description=(
+                    f"Tool invocation '{result.tool_name}.{result.action}' halted pending human approval: "
+                    f"{result.error_details or 'High-risk or gated tool execution.'}"
+                ),
+                payload={"parameters": sanitized_input},
+                risk_level=result.risk_level,
+                status="PENDING",
+            )
+            self.db.add(approval_req)
+
+            if request.task_id:
+                task_res = await self.db.execute(select(Task).where(Task.id == request.task_id))
+                task_obj = task_res.scalars().first()
+                if task_obj and task_obj.status not in (
+                    TaskStatus.COMPLETED.value,
+                    TaskStatus.FAILED.value,
+                    TaskStatus.CANCELLED.value,
+                ):
+                    task_obj.status = TaskStatus.APPROVAL_REQUIRED.value
+
         await self.db.commit()
         await self.db.refresh(record)
 

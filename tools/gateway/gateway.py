@@ -107,3 +107,25 @@ class ToolGateway:
             duration_ms=duration_ms,
             error_details=error_details,
         )
+
+    async def execute_approved(
+        self,
+        tool_name: str,
+        action: str,
+        parameters: dict[str, Any],
+    ) -> tuple[str, dict[str, Any], int, str | None]:
+        """Execute a tool action that has been reviewed and approved by a human operator."""
+        start_time = time.perf_counter()
+        handler = self.registry.get_handler(tool_name)
+        output: dict[str, Any] = {}
+        status = ToolExecutionStatus.SUCCESS.value
+        error_details: str | None = None
+
+        try:
+            output = await handler(action=action, parameters=parameters)
+        except Exception as exc:
+            status = ToolExecutionStatus.FAILED.value
+            error_details = str(exc)
+
+        duration_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+        return status, output, duration_ms, error_details
