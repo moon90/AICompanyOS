@@ -97,6 +97,11 @@ class User(Base):
         back_populates="reviewed_by_user",
         foreign_keys="ApprovalRequest.reviewed_by_user_id",
     )
+    decisions: Mapped[list["CompanyDecision"]] = relationship(
+        "CompanyDecision",
+        back_populates="decided_by_user",
+        foreign_keys="CompanyDecision.decided_by_user_id",
+    )
 
 
 class UserSession(Base):
@@ -221,6 +226,11 @@ class Company(Base):
     )
     approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
         "ApprovalRequest",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    decisions: Mapped[list["CompanyDecision"]] = relationship(
+        "CompanyDecision",
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -417,6 +427,11 @@ class Agent(Base):
         "ApprovalRequest",
         back_populates="agent",
         cascade="all, delete-orphan",
+    )
+    decisions: Mapped[list["CompanyDecision"]] = relationship(
+        "CompanyDecision",
+        back_populates="decided_by_agent",
+        foreign_keys="CompanyDecision.decided_by_agent_id",
     )
 
 
@@ -671,6 +686,10 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    decisions: Mapped[list["CompanyDecision"]] = relationship(
+        "CompanyDecision",
+        back_populates="project",
+    )
 
 
 class Task(Base):
@@ -822,6 +841,10 @@ class Task(Base):
         "ApprovalRequest",
         back_populates="task",
         cascade="all, delete-orphan",
+    )
+    decisions: Mapped[list["CompanyDecision"]] = relationship(
+        "CompanyDecision",
+        back_populates="task",
     )
 
 
@@ -1274,4 +1297,108 @@ class ApprovalRequest(Base):
 Index("ix_approval_requests_company_status", ApprovalRequest.company_id, ApprovalRequest.status)
 Index(
     "ix_approval_requests_company_created", ApprovalRequest.company_id, ApprovalRequest.created_at
+)
+
+
+class CompanyDecision(Base):
+    """Authoritative company decision entity adhering to docs/Memory.md § 33.
+
+    Decisions represent durable strategic, architectural, and operational determinations.
+    Historical decisions are immutable; superseded decisions point to newer decisions
+    via `superseded_by_decision_id` while transitioning status to SUPERSEDED.
+    """
+
+    __tablename__ = "company_decisions"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    decision: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="ACTIVE",
+        server_default="ACTIVE",
+    )
+    decided_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decided_by_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    superseded_by_decision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("company_decisions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="decisions")
+    project: Mapped["Project | None"] = relationship("Project", back_populates="decisions")
+    task: Mapped["Task | None"] = relationship("Task", back_populates="decisions")
+    decided_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[decided_by_user_id], back_populates="decisions"
+    )
+    decided_by_agent: Mapped["Agent | None"] = relationship(
+        "Agent", foreign_keys=[decided_by_agent_id], back_populates="decisions"
+    )
+    superseded_by_decision: Mapped["CompanyDecision | None"] = relationship(
+        "CompanyDecision",
+        remote_side="CompanyDecision.id",
+        foreign_keys=[superseded_by_decision_id],
+        backref="supersedes_decisions",
+    )
+
+
+Index("ix_company_decisions_company_status", CompanyDecision.company_id, CompanyDecision.status)
+Index(
+    "ix_company_decisions_company_created",
+    CompanyDecision.company_id,
+    CompanyDecision.created_at,
 )

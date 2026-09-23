@@ -1012,6 +1012,161 @@ describe("Web API Client", () => {
     );
   });
 
+  it("getCompanyState sends GET to memory state endpoint", async () => {
+    const mockState = {
+      company: { id: "comp-1", name: "Apex Corp" },
+      departments: [],
+      agents: [],
+      projects: [],
+      tasks_summary: { total: 0, by_status: {}, recent_active_tasks: [] },
+      recent_approvals: [],
+      decisions: [],
+      generated_at: "2026-09-23T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockState,
+    } as Response);
+
+    const res = await api.getCompanyState("comp-1");
+    expect(res.company.name).toBe("Apex Corp");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/memory/state",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("getCompanyDecisions sends GET with optional status filter", async () => {
+    const mockDecisions = {
+      items: [
+        {
+          id: "dec-1",
+          company_id: "comp-1",
+          title: "PostgreSQL Authority",
+          decision: "Store state in PG",
+          rationale: "ACID",
+          evidence: {},
+          status: "ACTIVE",
+          created_at: "2026-09-23T00:00:00Z",
+          updated_at: "2026-09-23T00:00:00Z",
+        },
+      ],
+      total: 1,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockDecisions,
+    } as Response);
+
+    const res = await api.getCompanyDecisions("comp-1", "ACTIVE");
+    expect(res.total).toBe(1);
+    expect(res.items[0].title).toBe("PostgreSQL Authority");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/memory/decisions?status=ACTIVE",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("createCompanyDecision sends POST with decision payload", async () => {
+    const mockCreated = {
+      id: "dec-new",
+      company_id: "comp-1",
+      title: "Immutable Chains",
+      decision: "Never mutate records",
+      rationale: "Auditability",
+      evidence: {},
+      status: "ACTIVE",
+      created_at: "2026-09-23T00:00:00Z",
+      updated_at: "2026-09-23T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockCreated,
+    } as Response);
+
+    const res = await api.createCompanyDecision("comp-1", {
+      title: "Immutable Chains",
+      decision: "Never mutate records",
+      rationale: "Auditability",
+    });
+    expect(res.id).toBe("dec-new");
+    expect(res.status).toBe("ACTIVE");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/memory/decisions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          title: "Immutable Chains",
+          decision: "Never mutate records",
+          rationale: "Auditability",
+        }),
+      })
+    );
+  });
+
+  it("supersedeCompanyDecision sends POST to supersede endpoint", async () => {
+    const mockSuperseded = {
+      id: "dec-v2",
+      company_id: "comp-1",
+      title: "Immutable Chains V2",
+      decision: "Enhanced chain",
+      rationale: "Better scaling",
+      evidence: {},
+      status: "ACTIVE",
+      created_at: "2026-09-23T00:00:00Z",
+      updated_at: "2026-09-23T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockSuperseded,
+    } as Response);
+
+    const res = await api.supersedeCompanyDecision("comp-1", "dec-v1", {
+      title: "Immutable Chains V2",
+      decision: "Enhanced chain",
+      rationale: "Better scaling",
+    });
+    expect(res.id).toBe("dec-v2");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/memory/decisions/dec-v1/supersede",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("inquireCeo sends POST with question payload", async () => {
+    const mockInquiryRes = {
+      answer: "The company is Apex Corp.",
+      citations: [{ source_type: "COMPANY", source_id: "comp-1", reference: "Company: Apex Corp" }],
+      grounded_state_timestamp: "2026-09-23T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockInquiryRes,
+    } as Response);
+
+    const res = await api.inquireCeo("comp-1", "What is our company name?");
+    expect(res.answer).toBe("The company is Apex Corp.");
+    expect(res.citations).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/ceo/inquire",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ question: "What is our company name?" }),
+      })
+    );
+  });
+
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

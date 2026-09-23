@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 10 — Approval & Oversight System** (COMPLETE)
+**Phase 11 — Basic Memory & Company State** (COMPLETE)
 
 ---
 
@@ -483,47 +483,85 @@
   * Updated `apps/web/app/page.tsx` Dashboard with live pending approvals count and alert badge.
   * Added 3 web client unit tests in `apps/web/lib/api.test.ts`.
 
+### Phase 11 — Basic Memory & Company State (COMPLETE)
+* **Domain Layer (`domain/memory/`):**
+  * `schemas.py`: Defined authoritative schemas `DecisionStatus` (`ACTIVE`, `SUPERSEDED`, `REVOKED`), `CompanyDecisionCreate`, `CompanyDecisionResponse`, `CompanyDecisionFilter`, `CompanyContextPacket`, `CeoInquiryCitation`, `CeoInquiryRequest`, and `CeoInquiryResponse`.
+  * `exceptions.py`: Created typed domain exceptions `MemoryError`, `DecisionNotFoundError`, `DecisionAlreadySupersededError`, `MemoryAccessDeniedError`, and `InvalidDecisionStateError`.
+  * `context_retriever.py`: Implemented Grounded Context Retrieval Engine:
+    * `build_grounded_company_prompt`: Assembles authoritative operational context packet from active database state (company profile, departments, agents, projects, tasks summary, approvals, decisions).
+    * `synthesize_task_context`: Injects company mission, active project constraints, and relevant active decisions into task prompt contexts.
+    * `answer_ceo_inquiry_grounded`: Implements strict zero-hallucination Q&A where CEO answers user questions citing live database state and active/superseded decisions.
+  * `__init__.py`: Clean domain module exports.
+* **Database & Authoritative Persistence:**
+  * Added `CompanyDecision` model in `infrastructure/database/models.py` with foreign keys to `companies.id`, `projects.id`, `tasks.id`, `users.id` (`decided_by_user_id`), `agents.id` (`decided_by_agent_id`), and self-referencing `superseded_by_decision_id` (`company_decisions.id`).
+  * Enforced immutable supersedence chaining with `fk_company_decisions_superseded_by_decisions` and indexes (`ix_company_decisions_company_status`, `ix_company_decisions_superseded_by`).
+  * Authored Alembic migration `database/migrations/versions/0011_create_decision_memory.py`, tested bidirectional rollback, and verified 0 schema drift with `alembic check`.
+* **Application Services:**
+  * Created `MemoryService` in `application/services/memory_service.py`:
+    * `record_decision`: Records authoritative decisions with title, decision statement, rationale, evidence, and creator tracking.
+    * `supersede_decision`: Supersedes an active decision with ordered flush to satisfy foreign key constraints, marking old decision as `SUPERSEDED` and linking to the new `ACTIVE` decision.
+    * `get_decision` & `list_decisions`: Tenant-isolated decision retrieval and filtering.
+    * `get_company_state`: Synthesizes complete live operational snapshot across all company assets.
+    * `get_context_for_task`: Assembles grounded operational packets for task executions.
+    * `ceo_inquire`: Answers questions directly from live PostgreSQL state with exact citations.
+  * Updated `SystemService` to report `CURRENT_PHASE = "Phase 11 — Basic Memory & Company State"`.
+* **API Layer (`apps/api/`):**
+  * Created request/response schemas in `apps/api/schemas/memory.py`: `CompanyDecisionCreateRequest`, `CompanyDecisionItemResponse`, `CompanyDecisionListResponse`, `CompanyStateResponse`, `CeoInquiryRequest`, `CeoInquiryResponse`.
+  * Built RESTful route handlers in `apps/api/routes/memory.py`:
+    * `GET /api/v1/companies/{company_id}/memory/state` (grounded operational state)
+    * `GET /api/v1/companies/{company_id}/memory/decisions` (decision registry query)
+    * `POST /api/v1/companies/{company_id}/memory/decisions` (authoritative decision creation)
+    * `GET /api/v1/companies/{company_id}/memory/decisions/{decision_id}` (decision details)
+    * `POST /api/v1/companies/{company_id}/memory/decisions/{decision_id}/supersede` (immutable supersedence)
+    * `POST /api/v1/companies/{company_id}/ceo/inquire` (grounded CEO state Q&A)
+  * Registered router in `apps/api/main.py`.
+* **Frontend UI Console (`apps/web/`):**
+  * Updated `apps/web/lib/api.ts` with `CompanyDecision`, `CompanyDecisionListResponse`, `CompanyStateResponse`, `CeoInquiryCitation`, `CeoInquiryResponse` interfaces and API methods (`getCompanyState`, `getCompanyDecisions`, `createCompanyDecision`, `supersedeCompanyDecision`, `inquireCeo`).
+  * Added 5 frontend client unit tests in `apps/web/lib/api.test.ts` (33/33 tests passing).
+  * Updated `apps/web/components/shell/Sidebar.tsx` and `apps/web/app/page.tsx` with live decision telemetry and Phase 11 indicators.
+  * Enhanced `apps/web/app/ceo/page.tsx` with unified Executive Mode Switcher:
+    * Mode 1: Strategic Planning & Decomposition Console (DAG graph, department delegations, governance approval gates, risk assessments, workflow launch).
+    * Mode 2: Grounded Memory & Knowledge Q&A Console (interactive CEO inquiry console with grounded citations, live company state inspector, decision registry with immutable supersedence modal, audit provenance tracking).
+  * Verified production build: all 15 routes compiled with 0 TypeScript/ESLint warnings or errors.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (121 passed in 12.59s) |
-| **Approval Domain & Service Tests** | `pytest tests/unit/test_approval*.py tests/integration/test_api_approval.py` | **PASSED** (15 tests in 1.47s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 155 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (155 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (154 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (28 tests in 2 files in 263ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (140 passed in 14.05s) |
+| **Memory Domain & Decision Tests** | `pytest tests/unit/test_memory*.py tests/unit/test_ceo_grounded_qa.py tests/integration/test_api_memory.py` | **PASSED** (19 tests in 2.12s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 174 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (174 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (166 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (33 tests in 2 files in 260ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (15 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0010` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0011` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
-| **Authentication & Isolation Regression** | Automated test suite | **PASSED** (Multi-company data isolation, human-only approvals, agent rejection enforcement) |
+| **Grounded CEO Q&A Integrity** | Automated & Live API | **PASSED** (Cites active PostgreSQL state, 0 hallucinations, immutable decision supersedence) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **Human-Only Authority Enforcement (docs/Rules.md § 42):**
-   Agents are strictly forbidden from approving or rejecting actions for themselves or other agents. Calling approval endpoints as an agent raises `AgentCannotApproveError` and returns `403 Forbidden`.
-2. **Consequential Action Gating:**
-   All actions designated as consequential (`SEND_EMAIL`, `PUBLISH_CONTENT`, `SPEND_MONEY`, `DELETE_DATA`, `DEPLOY_PRODUCTION`, `MODIFY_CONFIGURATION`, `EXTERNAL_COMMUNICATION`, `DATABASE_MIGRATION`, `HIGH_RISK_ACTION`) or classified as `HIGH`/`CRITICAL` risk automatically trigger approval interception.
-3. **Bidirectional Tool Gateway Integration:**
-   When a tool execution halts with `APPROVAL_REQUIRED`, an `ApprovalRequest` is created in PostgreSQL with `status="PENDING"`. When a human approves the request, `ApprovalService` resumes execution through `ToolGateway.execute_approved` and transitions the `ToolExecutionRecord` to `SUCCESS`. If rejected, execution is permanently marked `BLOCKED`.
-4. **Task State Synchronization:**
-   Tasks awaiting approval are moved to `TaskStatus.APPROVAL_REQUIRED`. Upon approval, tasks resume to `IN_PROGRESS`. Upon rejection, tasks transition to `BLOCKED`.
-5. **Terminal State Immutability:**
-   Once an approval request reaches `APPROVED`, `REJECTED`, or `CANCELLED`, it cannot transition to any other status. Attempting to review an already-processed approval raises `ApprovalAlreadyProcessedError` (`409 Conflict`).
-6. **Runtime Active Presence Remains 0:**
+1. **Immutable Decision Supersedence (`docs/Memory.md` § 33–34):**
+   Decisions are never hard-deleted or silently rewritten. Every change creates a new `ACTIVE` decision while transitioning the old decision to `SUPERSEDED` and linking its `superseded_by_decision_id` foreign key. An ordered session flush guarantees database referential integrity during update.
+2. **Strict Grounding & Zero Hallucination (`docs/Memory.md` § 59–60):**
+   CEO Q&A answers questions strictly from live operational state retrieved from PostgreSQL (departments, agents, projects, tasks, execution records, approvals, and decisions). Every response includes authoritative `citations` referencing source entities.
+3. **Multi-Tenancy Memory Isolation:**
+   All memory and decision queries strictly filter by `company_id`. Cross-tenant decision lookup raises `MemoryAccessDeniedError` / `403 Forbidden`.
+4. **Runtime Active Presence Remains 0:**
    Active agent presence and long-lived background loops remain strictly at 0, reserved for Phase 14.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 11 — Basic Memory & Company State**
+**Phase 12 — Specialized Department Workflows**
 *(Awaiting user authorization before proceeding).*
+
 
 
 

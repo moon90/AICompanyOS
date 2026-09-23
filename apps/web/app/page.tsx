@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [openTaskCount, setOpenTaskCount] = useState<number>(0);
   const [blockedTaskCount, setBlockedTaskCount] = useState<number>(0);
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
+  const [decisionCount, setDecisionCount] = useState<number>(0);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -50,7 +51,7 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const [depts, ags, plns, ctx, projs, tsks, apprs] = await Promise.all([
+          const [depts, ags, plns, ctx, projs, tsks, apprs, decs] = await Promise.all([
             api.getDepartments(primaryCompany.id).catch(() => []),
             api.getAgents(primaryCompany.id).catch(() => []),
             api.getPlans(primaryCompany.id).catch(() => []),
@@ -58,6 +59,7 @@ export default function DashboardPage() {
             api.getProjects(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
             api.getTasks(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
             api.getApprovals(primaryCompany.id, { status: "PENDING" }).catch(() => ({ items: [], total: 0 })),
+            api.getCompanyDecisions(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
           ]);
           setDepartmentCount(depts.length);
           setAgentCount(ags.length);
@@ -69,6 +71,7 @@ export default function DashboardPage() {
           setOpenTaskCount(open.length);
           setBlockedTaskCount(blocked.length);
           setPendingApprovalCount(apprs.total);
+          setDecisionCount(decs.total);
         } catch {
           setDepartmentCount(0);
           setAgentCount(0);
@@ -78,6 +81,7 @@ export default function DashboardPage() {
           setOpenTaskCount(0);
           setBlockedTaskCount(0);
           setPendingApprovalCount(0);
+          setDecisionCount(0);
         }
       } else {
         setDepartmentCount(0);
@@ -88,6 +92,7 @@ export default function DashboardPage() {
         setOpenTaskCount(0);
         setBlockedTaskCount(0);
         setPendingApprovalCount(0);
+        setDecisionCount(0);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -419,7 +424,7 @@ export default function DashboardPage() {
                 <span className="truncate">{activeCompany ? activeCompany.name : "Unassigned"}</span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
-                {activeCompany ? `${departmentCount} Depts · ${agentCount} Agents · ${planCount} Plans` : "Phase 9 Active"}
+                {activeCompany ? `${departmentCount} Depts · ${agentCount} Agents · ${decisionCount} Decisions` : "Phase 11 Active"}
               </p>
             </div>
           </div>

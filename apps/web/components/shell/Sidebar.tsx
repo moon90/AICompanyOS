@@ -68,7 +68,7 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           name: "CEO Orchestrator",
           href: "/ceo",
           icon: Bot,
-          phaseBadge: "Phase 5",
+          phaseBadge: "Phase 11",
           isCurrent: pathname === "/ceo",
         },
         {
@@ -215,13 +215,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
           <span className="text-slate-400 font-medium">CEO Orchestrator</span>
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-            Inactive
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Grounded
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Autonomous orchestration activates in <strong className="text-slate-300">Phase 5</strong>.
+          State memory & Grounded Q&A active in <strong className="text-slate-300">Phase 11</strong>.
         </p>
       </div>
 

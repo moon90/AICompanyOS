@@ -1220,6 +1220,172 @@ export const api = {
       }
     );
   },
+
+  async getCompanyState(companyId: string): Promise<CompanyStateResponse> {
+    return request<CompanyStateResponse>(
+      `/api/v1/companies/${companyId}/memory/state`,
+      { method: "GET" }
+    );
+  },
+
+  async getCompanyDecisions(
+    companyId: string,
+    statusFilter?: string
+  ): Promise<CompanyDecisionListResponse> {
+    const q = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : "";
+    return request<CompanyDecisionListResponse>(
+      `/api/v1/companies/${companyId}/memory/decisions${q}`,
+      { method: "GET" }
+    );
+  },
+
+  async createCompanyDecision(
+    companyId: string,
+    payload: {
+      title: string;
+      decision: string;
+      rationale: string;
+      evidence?: Record<string, unknown>;
+      project_id?: string | null;
+      task_id?: string | null;
+    }
+  ): Promise<CompanyDecision> {
+    return request<CompanyDecision>(
+      `/api/v1/companies/${companyId}/memory/decisions`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async supersedeCompanyDecision(
+    companyId: string,
+    decisionId: string,
+    payload: {
+      title: string;
+      decision: string;
+      rationale: string;
+      evidence?: Record<string, unknown>;
+      project_id?: string | null;
+      task_id?: string | null;
+    }
+  ): Promise<CompanyDecision> {
+    return request<CompanyDecision>(
+      `/api/v1/companies/${companyId}/memory/decisions/${decisionId}/supersede`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async inquireCeo(
+    companyId: string,
+    question: string
+  ): Promise<CeoInquiryResponse> {
+    return request<CeoInquiryResponse>(
+      `/api/v1/companies/${companyId}/ceo/inquire`,
+      {
+        method: "POST",
+        body: JSON.stringify({ question }),
+      }
+    );
+  },
 };
+
+export interface CompanyDecision {
+  id: string;
+  company_id: string;
+  project_id?: string | null;
+  task_id?: string | null;
+  title: string;
+  decision: string;
+  rationale: string;
+  evidence: Record<string, unknown>;
+  status: "ACTIVE" | "SUPERSEDED" | "REVOKED";
+  decided_by_user_id?: string | null;
+  decided_by_agent_id?: string | null;
+  superseded_by_decision_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyDecisionListResponse {
+  items: CompanyDecision[];
+  total: number;
+}
+
+export interface CompanyStateResponse {
+  company: {
+    id: string;
+    name: string;
+    mission?: string | null;
+    description?: string | null;
+    created_at?: string | null;
+  };
+  departments: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    created_at?: string | null;
+  }>;
+  agents: Array<{
+    id: string;
+    name: string;
+    role: string;
+    department_id?: string | null;
+    status: string;
+    authority_level: string;
+  }>;
+  projects: Array<{
+    id: string;
+    name: string;
+    status: string;
+    priority: string;
+    objective?: string | null;
+    description?: string | null;
+  }>;
+  tasks_summary: {
+    total: number;
+    by_status: Record<string, number>;
+    recent_active_tasks: Array<{
+      id: string;
+      title: string;
+      status: string;
+      priority: string;
+    }>;
+  };
+  recent_approvals: Array<{
+    id: string;
+    action_type: string;
+    risk_level: string;
+    status: string;
+    description: string;
+  }>;
+  decisions: Array<{
+    id: string;
+    title: string;
+    decision: string;
+    rationale: string;
+    status: string;
+    superseded_by_decision_id?: string | null;
+    created_at?: string | null;
+  }>;
+  generated_at: string;
+}
+
+export interface CeoInquiryCitation {
+  source_type: string;
+  source_id: string;
+  reference: string;
+}
+
+export interface CeoInquiryResponse {
+  answer: string;
+  citations: CeoInquiryCitation[];
+  grounded_state_timestamp: string;
+}
+
 
 
