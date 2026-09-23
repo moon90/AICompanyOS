@@ -234,6 +234,11 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    activity_events: Mapped[list["ActivityEvent"]] = relationship(
+        "ActivityEvent",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -690,6 +695,10 @@ class Project(Base):
         "CompanyDecision",
         back_populates="project",
     )
+    activity_events: Mapped[list["ActivityEvent"]] = relationship(
+        "ActivityEvent",
+        back_populates="project",
+    )
 
 
 class Task(Base):
@@ -844,6 +853,10 @@ class Task(Base):
     )
     decisions: Mapped[list["CompanyDecision"]] = relationship(
         "CompanyDecision",
+        back_populates="task",
+    )
+    activity_events: Mapped[list["ActivityEvent"]] = relationship(
+        "ActivityEvent",
         back_populates="task",
     )
 
@@ -1402,3 +1415,84 @@ Index(
     CompanyDecision.company_id,
     CompanyDecision.created_at,
 )
+
+
+class ActivityEvent(Base):
+    """Activity event entity adhering to docs/Phases.md Section 17.
+
+    Human-readable operational company timeline tracking what happened over time.
+    """
+
+    __tablename__ = "activity_events"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    actor_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="system",
+        server_default="system",
+    )
+    actor_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+    message: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    event_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="activity_events")
+    project: Mapped["Project | None"] = relationship("Project", back_populates="activity_events")
+    task: Mapped["Task | None"] = relationship("Task", back_populates="activity_events")
+
+
+Index("ix_activity_events_company_created", ActivityEvent.company_id, ActivityEvent.created_at)
+Index("ix_activity_events_project_created", ActivityEvent.project_id, ActivityEvent.created_at)
+Index("ix_activity_events_task_created", ActivityEvent.task_id, ActivityEvent.created_at)
+Index(
+    "ix_activity_events_actor",
+    ActivityEvent.company_id,
+    ActivityEvent.actor_type,
+    ActivityEvent.actor_id,
+)
+Index("ix_activity_events_event_type", ActivityEvent.company_id, ActivityEvent.event_type)

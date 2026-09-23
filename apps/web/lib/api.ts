@@ -1324,7 +1324,109 @@ export const api = {
       }
     );
   },
+
+  async getActivity(
+    companyId: string,
+    params?: ActivityFilters
+  ): Promise<ActivityListResponse> {
+    const query = new URLSearchParams();
+    if (params?.project_id) query.set("project_id", params.project_id);
+    if (params?.task_id) query.set("task_id", params.task_id);
+    if (params?.actor_type) query.set("actor_type", params.actor_type);
+    if (params?.actor_id) query.set("actor_id", params.actor_id);
+    if (params?.event_type) query.set("event_type", params.event_type);
+    if (params?.search) query.set("search", params.search);
+    if (params?.limit) query.set("limit", params.limit.toString());
+    if (params?.offset) query.set("offset", params.offset.toString());
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return request<ActivityListResponse>(
+      `/api/v1/companies/${companyId}/activity${qs}`,
+      { method: "GET" }
+    );
+  },
+
+  async getProjectActivity(
+    companyId: string,
+    projectId: string,
+    params?: ActivityFilters
+  ): Promise<ActivityListResponse> {
+    const query = new URLSearchParams();
+    if (params?.event_type) query.set("event_type", params.event_type);
+    if (params?.search) query.set("search", params.search);
+    if (params?.limit) query.set("limit", params.limit.toString());
+    if (params?.offset) query.set("offset", params.offset.toString());
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return request<ActivityListResponse>(
+      `/api/v1/companies/${companyId}/projects/${projectId}/activity${qs}`,
+      { method: "GET" }
+    );
+  },
+
+  async getTaskActivity(
+    companyId: string,
+    taskId: string,
+    params?: ActivityFilters
+  ): Promise<ActivityListResponse> {
+    const query = new URLSearchParams();
+    if (params?.event_type) query.set("event_type", params.event_type);
+    if (params?.search) query.set("search", params.search);
+    if (params?.limit) query.set("limit", params.limit.toString());
+    if (params?.offset) query.set("offset", params.offset.toString());
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return request<ActivityListResponse>(
+      `/api/v1/companies/${companyId}/tasks/${taskId}/activity${qs}`,
+      { method: "GET" }
+    );
+  },
+
+  async getAgentActivity(
+    companyId: string,
+    agentId: string,
+    params?: ActivityFilters
+  ): Promise<ActivityListResponse> {
+    const query = new URLSearchParams();
+    if (params?.event_type) query.set("event_type", params.event_type);
+    if (params?.search) query.set("search", params.search);
+    if (params?.limit) query.set("limit", params.limit.toString());
+    if (params?.offset) query.set("offset", params.offset.toString());
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return request<ActivityListResponse>(
+      `/api/v1/companies/${companyId}/agents/${agentId}/activity${qs}`,
+      { method: "GET" }
+    );
+  },
 };
+
+export interface ActivityEvent {
+  id: string;
+  company_id: string;
+  project_id?: string | null;
+  task_id?: string | null;
+  actor_type: string;
+  actor_id?: string | null;
+  event_type: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ActivityListResponse {
+  items: ActivityEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ActivityFilters {
+  project_id?: string;
+  task_id?: string;
+  actor_type?: string;
+  actor_id?: string;
+  event_type?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
 
 export interface CompanyDecision {
   id: string;

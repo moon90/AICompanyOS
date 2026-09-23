@@ -108,6 +108,21 @@ class ApprovalService:
             status=ApprovalStatus.PENDING.value,
         )
         self.db.add(approval)
+        await self.db.flush()
+
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            task_id=approval.task_id,
+            actor_type="agent" if approval.agent_id else "system",
+            actor_id=approval.agent_id,
+            event_type="APPROVAL_REQUESTED",
+            message=f"Approval requested for {approval.action_type}: {approval.description}",
+            metadata={"risk_level": approval.risk_level, "action_type": approval.action_type},
+        )
+
         await self.db.commit()
         await self.db.refresh(approval)
 
@@ -244,6 +259,19 @@ class ApprovalService:
             if task_obj and task_obj.status == TaskStatus.APPROVAL_REQUIRED.value:
                 task_obj.status = TaskStatus.IN_PROGRESS.value
 
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            task_id=approval.task_id,
+            actor_type="user",
+            actor_id=user_id,
+            event_type="APPROVAL_RESOLVED",
+            message=f"Approved: {approval.action_type}",
+            metadata={"status": "APPROVED", "decision_reason": decision_input.decision_reason},
+        )
+
         await self.db.commit()
         await self.db.refresh(approval)
         return approval
@@ -298,6 +326,19 @@ class ApprovalService:
             task_obj = task_res.scalars().first()
             if task_obj and task_obj.status == TaskStatus.APPROVAL_REQUIRED.value:
                 task_obj.status = TaskStatus.BLOCKED.value
+
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            task_id=approval.task_id,
+            actor_type="user",
+            actor_id=user_id,
+            event_type="APPROVAL_RESOLVED",
+            message=f"Rejected: {approval.action_type}",
+            metadata={"status": "REJECTED", "decision_reason": decision_input.decision_reason},
+        )
 
         await self.db.commit()
         await self.db.refresh(approval)

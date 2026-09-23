@@ -214,14 +214,14 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
       {/* Phase Boundary Widget per UI.md § 21 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Kanban Engine</span>
+          <span className="text-slate-400 font-medium">Activity Timeline</span>
           <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Phase 12
+            Phase 13 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          State-machine driven Kanban active in <strong className="text-slate-300">Phase 12</strong>.
+          Operational company history & audit timeline active in <strong className="text-slate-300">Phase 13</strong>.
         </p>
       </div>
 

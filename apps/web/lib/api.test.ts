@@ -1210,6 +1210,79 @@ describe("Web API Client", () => {
     );
   });
 
+  it("getActivity returns paginated company activity events", async () => {
+    const mockActivity = {
+      items: [
+        {
+          id: "act-1",
+          company_id: "comp-1",
+          project_id: "proj-1",
+          task_id: "task-1",
+          actor_type: "user",
+          actor_id: "user-1",
+          event_type: "TASK_CREATED",
+          message: "Created task 'Build Auth'",
+          metadata: { priority: "high" },
+          created_at: "2026-09-23T05:00:00Z",
+        },
+      ],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockActivity,
+    } as Response);
+
+    const res = await api.getActivity("comp-1", { search: "Auth", limit: 10 });
+    expect(res.total).toBe(1);
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0].event_type).toBe("TASK_CREATED");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/activity?search=Auth&limit=10",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("getProjectActivity returns project-scoped activity events", async () => {
+    const mockActivity = {
+      items: [
+        {
+          id: "act-2",
+          company_id: "comp-1",
+          project_id: "proj-1",
+          task_id: null,
+          actor_type: "user",
+          actor_id: "user-1",
+          event_type: "PROJECT_CREATED",
+          message: "Created project 'Alpha'",
+          metadata: {},
+          created_at: "2026-09-23T05:00:00Z",
+        },
+      ],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockActivity,
+    } as Response);
+
+    const res = await api.getProjectActivity("comp-1", "proj-1");
+    expect(res.total).toBe(1);
+    expect(res.items[0].project_id).toBe("proj-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/projects/proj-1/activity",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

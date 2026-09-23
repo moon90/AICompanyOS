@@ -176,6 +176,20 @@ class TaskService:
                     )
                     self.db.add(dep)
 
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            project_id=task.project_id,
+            task_id=task.id,
+            actor_type="user",
+            actor_id=user_id,
+            event_type="TASK_CREATED",
+            message=f"Created task '{task.title}'",
+            metadata={"status": task.status, "priority": task.priority},
+        )
+
         await self.db.commit()
         return await self.get_task(user_id, company_id, task.id)
 
@@ -350,6 +364,7 @@ class TaskService:
             new_status, task.started_at, task.completed_at
         )
 
+        old_status = task.status
         task.status = new_status
         task.started_at = started_at
         task.completed_at = completed_at
@@ -358,6 +373,20 @@ class TaskService:
             task.output = output.strip() if output else None
         if error_details is not None:
             task.error_details = error_details.strip() if error_details else None
+
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            project_id=task.project_id,
+            task_id=task.id,
+            actor_type="user",
+            actor_id=user_id,
+            event_type="TASK_STATUS_CHANGED",
+            message=f"Task '{task.title}' transitioned from {old_status} to {new_status}",
+            metadata={"old_status": old_status, "new_status": new_status},
+        )
 
         await self.db.commit()
         return await self.get_task(user_id, company_id, task_id)
@@ -402,6 +431,24 @@ class TaskService:
             TaskStatus.READY.value,
         }:
             task.status = TaskStatus.ASSIGNED.value
+
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            project_id=task.project_id,
+            task_id=task.id,
+            actor_type="user",
+            actor_id=user_id,
+            event_type="TASK_ASSIGNED",
+            message=f"Task '{task.title}' assigned",
+            metadata={
+                "assigned_to_agent_id": assigned_to_agent_id,
+                "assigned_to_user_id": assigned_to_user_id,
+                "status": task.status,
+            },
+        )
 
         await self.db.commit()
         return await self.get_task(user_id, company_id, task_id)

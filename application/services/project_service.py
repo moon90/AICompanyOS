@@ -101,6 +101,21 @@ class ProjectService:
         )
 
         self.db.add(project)
+        await self.db.flush()
+
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            project_id=project.id,
+            actor_type="user",
+            actor_id=user_id,
+            event_type="PROJECT_CREATED",
+            message=f"Created project '{project.name}'",
+            metadata={"project_name": project.name, "priority": project.priority},
+        )
+
         await self.db.commit()
         await self.db.refresh(project)
         return project
@@ -243,9 +258,13 @@ class ProjectService:
         if objective is not None:
             project.objective = objective.strip() if objective else None
 
+        status_changed = False
+        old_status = project.status
         if status is not None:
             valid_statuses = {s.value for s in ProjectStatus}
             if status in valid_statuses:
+                if status != old_status:
+                    status_changed = True
                 project.status = status
                 if status == ProjectStatus.COMPLETED.value and project.completed_at is None:
                     project.completed_at = datetime.now(UTC)
@@ -273,6 +292,20 @@ class ProjectService:
         if owner_user_id is not None:
             await self._verify_membership(owner_user_id, company_id)
             project.owner_user_id = owner_user_id
+
+        if status_changed:
+            from application.services.activity_service import ActivityService
+
+            await ActivityService.record_event(
+                session=self.db,
+                company_id=company_id,
+                project_id=project.id,
+                actor_type="user",
+                actor_id=user_id,
+                event_type="PROJECT_STATUS_CHANGED",
+                message=f"Project '{project.name}' status transitioned from {old_status} to {project.status}",
+                metadata={"old_status": old_status, "new_status": project.status},
+            )
 
         await self.db.commit()
         await self.db.refresh(project)

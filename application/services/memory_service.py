@@ -112,6 +112,22 @@ class MemoryService:
             decided_by_agent_id=data.decided_by_agent_id,
         )
         self.db.add(decision)
+        await self.db.flush()
+
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            project_id=data.project_id,
+            task_id=data.task_id,
+            actor_type="user" if user_id else ("agent" if data.decided_by_agent_id else "system"),
+            actor_id=user_id or data.decided_by_agent_id,
+            event_type="DECISION_RECORDED",
+            message=f"Recorded decision: '{decision.title}'",
+            metadata={"decision": decision.decision, "status": decision.status},
+        )
+
         await self.db.commit()
         await self.db.refresh(decision)
         return decision
@@ -166,6 +182,23 @@ class MemoryService:
 
         old_decision.status = DecisionStatus.SUPERSEDED.value
         old_decision.superseded_by_decision_id = new_decision.id
+
+        from application.services.activity_service import ActivityService
+
+        await ActivityService.record_event(
+            session=self.db,
+            company_id=company_id,
+            project_id=new_decision.project_id,
+            task_id=new_decision.task_id,
+            actor_type="user" if user_id else ("agent" if data.decided_by_agent_id else "system"),
+            actor_id=user_id or data.decided_by_agent_id,
+            event_type="DECISION_SUPERSEDED",
+            message=f"Superseded decision '{old_decision.title}' with '{new_decision.title}'",
+            metadata={
+                "superseded_decision_id": old_decision.id,
+                "new_decision_id": new_decision.id,
+            },
+        )
 
         await self.db.commit()
         await self.db.refresh(new_decision)

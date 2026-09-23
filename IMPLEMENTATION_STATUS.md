@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 12 — Kanban Boards** (COMPLETE)
+**Phase 13 — Activity History** (COMPLETE)
 
 ---
 
@@ -572,34 +572,96 @@
   * **Production Build:**
     * `npm run build` compiled all 15 routes cleanly with zero TypeScript or ESLint errors.
 
+### Phase 13 — Activity History (COMPLETE)
+* **Authoritative Persistence Layer (`infrastructure/database/models.py`, `database/migrations/`):**
+  * Added `ActivityEvent` entity mapped to `activity_events` table with:
+    - Primary key UUID `id`, `company_id` (foreign key to companies), optional `project_id` (foreign key to projects), optional `task_id` (foreign key to tasks).
+    - `actor_type` (`USER`, `AGENT`, `SYSTEM`).
+    - `actor_id` (nullable string holding operator UUID, agent UUID, or system indicator).
+    - `event_type` (`PROJECT_CREATED`, `PROJECT_STATUS_CHANGED`, `TASK_CREATED`, `TASK_ASSIGNED`, `TASK_STATUS_CHANGED`, `TASK_DELEGATED`, `EXECUTION_STARTED`, `EXECUTION_COMPLETED`, `TASK_FAILED`, `TASK_RECOVERED`, `APPROVAL_REQUESTED`, `APPROVAL_RESOLVED`, `DECISION_RECORDED`, `DECISION_SUPERSEDED`, `TOOL_EXECUTED`).
+    - `message` (human-readable operational prose summary).
+    - `event_metadata` (JSON column holding contextual attributes and IDs).
+    - `created_at` (UTC timestamp).
+  * Added compound indexes for fast reverse-chronological multi-tenant querying:
+    - `ix_activity_events_company_time` (`company_id`, `created_at DESC`)
+    - `ix_activity_events_project` (`company_id`, `project_id`, `created_at DESC`)
+    - `ix_activity_events_task` (`company_id`, `task_id`, `created_at DESC`)
+    - `ix_activity_events_actor` (`company_id`, `actor_type`, `created_at DESC`)
+    - `ix_activity_events_event_type` (`company_id`, `event_type`, `created_at DESC`)
+  * Generated and applied Alembic migration `0012_create_activity_events.py` with verified bidirectional rollback and 0 schema drift (`alembic check`).
+* **Domain Layer (`domain/activity/`):**
+  * Created `domain/activity/schemas.py`: `ActorType` (StrEnum), `ActivityEventType` (StrEnum), `ActivityEventCreate`, `ActivityEventResponse`, `ActivityFilterParams`.
+  * Created `domain/activity/exceptions.py`: `ActivityError`, `ActivityNotFoundError`, `ActivityAccessDeniedError`.
+* **Application Services Layer (`application/services/`):**
+  * Implemented `ActivityService` in `application/services/activity_service.py` with multi-tenant company isolation:
+    - `record_event()`: Records operational company events with automated JSON metadata sanitization.
+    - `get_company_activity()`: Reverse-chronological timeline retrieval with filters by event_type, actor_type, date range, and pagination.
+    - `get_project_activity()`, `get_task_activity()`, `get_agent_activity()`: Scoped timeline retrieval.
+  * Integrated non-invasive lifecycle event hooks:
+    - `ProjectService`: Emits `PROJECT_CREATED` and `PROJECT_STATUS_CHANGED`.
+    - `TaskService`: Emits `TASK_CREATED`, `TASK_STATUS_CHANGED`, and `TASK_ASSIGNED`.
+    - `ApprovalService`: Emits `APPROVAL_REQUESTED` and `APPROVAL_RESOLVED`.
+    - `MemoryService`: Emits `DECISION_RECORDED` and `DECISION_SUPERSEDED`.
+  * Updated `SystemService` to report `CURRENT_PHASE = "Phase 13 — Activity History"`.
+* **API Layer (`apps/api/`):**
+  * Created Pydantic response models in `apps/api/schemas/activity.py` with model validators mapping column `event_metadata` to API attribute `metadata`.
+  * Created API routes in `apps/api/routes/activity.py`:
+    - `GET /api/v1/companies/{company_id}/activity`
+    - `GET /api/v1/companies/{company_id}/activity/projects/{project_id}`
+    - `GET /api/v1/companies/{company_id}/activity/tasks/{task_id}`
+    - `GET /api/v1/companies/{company_id}/activity/agents/{agent_id}`
+  * Enforced company membership authorization and pagination controls.
+* **Frontend Activity Console (`apps/web/`):**
+  * **API Client & Tests (`apps/web/lib/api.ts`, `apps/web/lib/api.test.ts`):**
+    - Added `ActivityEvent`, `ActivityListResponse`, `ActivityFilters` interfaces.
+    - Added client methods `getActivity`, `getProjectActivity`, `getTaskActivity`, `getAgentActivity`.
+    - Added comprehensive vitest unit tests; 36/36 tests passing in 279ms.
+  * **Executive Activity Console (`apps/web/app/activity/page.tsx`):**
+    - Scope switcher: All Company, By Project, By Task, By Agent with dynamic project/task/agent select dropdowns.
+    - Category pills: Projects, Tasks, Executions, Approvals, Decisions with counts and visual badges.
+    - Search bar: text filtering across message narratives and metadata.
+    - Real-time auto-refresh toggle with live polling interval (15s) and pulsing indicator.
+    - Reverse-chronological timeline feed with relative timestamps (`just now`, `2m ago`, etc.).
+    - Distinct actor badges (Operator, Agent, System) with respective icons and colors.
+    - Association chips with direct deep-links to project boards and task drawers.
+    - Structured metadata inspection modal for viewing JSON payload details.
+  * **Dashboard Integration (`apps/web/app/page.tsx`):**
+    - Replaced empty state with live feed of 5 most recent company events.
+    - Event categories, actor icons, relative timestamps, and link to full `/activity` console.
+  * **Sidebar Navigation (`apps/web/components/shell/Sidebar.tsx`):**
+    - Updated Activity nav item badge to `Phase 13`.
+    - Updated Phase Boundary Widget to reflect Phase 13 Activity Timeline.
+  * **Production Build:**
+    - `npm run build` compiled all 15 routes cleanly with zero TypeScript or ESLint errors.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (149 passed in 15.80s) |
-| **Project & Board Tests** | `pytest tests/unit/test_project*.py tests/integration/test_api_board.py` | **PASSED** (12 tests in 2.50s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 176 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (176 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (168 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (34 tests in 2 files in 260ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (156 passed in 17.12s) |
+| **Activity Tests** | `pytest tests/unit/test_activity_service.py tests/integration/test_api_activity.py` | **PASSED** (7 tests in 1.37s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 185 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (185 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (177 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (36 tests in 2 files in 279ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (15 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0011` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0012` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
-| **State Machine Enforcement** | Automated & Live API | **PASSED** (Invalid transitions rejected with 400 Bad Request; UI card rollback verified) |
+| **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all queries) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **Kanban as a Projection of Task State (`docs/Phases.md` § 16):**
-   Kanban is strictly an authoritative projection/view of task state, not a second task system. No secondary database tables or separate Kanban states exist.
-2. **State Machine Validation on Drag-and-Drop:**
-   All column transitions initiated via drag-and-drop or modal trigger `PATCH /api/v1/companies/{company_id}/tasks/{task_id}/status` and must satisfy `TaskStateMachine.validate_transition()`. Invalid transitions are rejected at the application service layer with `TaskInvalidStateTransitionError` (400 Bad Request).
-3. **Optimistic Updates with Safe Rollback:**
-   The frontend Kanban board performs optimistic card movement for responsive user interaction, but captures pre-drag state and rolls back automatically if the backend rejects the transition, notifying the operator of valid transition paths.
+1. **Activity History vs. Audit Log Distinction (`docs/Architecture.md` § 14, `docs/Phases.md` § 17):**
+   Activity History provides a human-readable, reverse-chronological operational company narrative (*"Task assigned to CMO"*, *"Approval granted for Tool Execution"*), distinct from low-level technical audit logs (raw cryptographic signatures, HTTP wire payloads).
+2. **Non-Invasive Lifecycle Hook Integration:**
+   Activity events are emitted at the application service boundaries during key state mutations (`ProjectService`, `TaskService`, `ApprovalService`, `MemoryService`) without coupling domain entities to the event logging subsystem.
+3. **Compound Indexes for Query Performance:**
+   Database indexes on `(company_id, created_at DESC)` and scoped pairs `(company_id, project_id, created_at DESC)`, `(company_id, task_id, created_at DESC)` ensure sub-millisecond timeline retrieval even as event volume scales.
 4. **Active Agent Presence Remains 0:**
    Active agent presence and long-lived autonomous execution loops remain strictly at 0, reserved for Phase 14.
 
@@ -607,5 +669,6 @@
 
 ## Next Authorized Phase
 
-**Phase 13 — Activity History**
+**Phase 14 — Autonomous Execution Loop**
 *(Awaiting user authorization before proceeding).*
+

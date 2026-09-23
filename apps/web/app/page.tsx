@@ -15,11 +15,28 @@ import {
   RefreshCw,
   Server,
   ShieldAlert,
+  User as UserIcon,
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { api, Company, SystemStatus, User } from "@/lib/api";
+import { api, Company, SystemStatus, User, ActivityEvent } from "@/lib/api";
 import { ShellLayout } from "@/components/shell/ShellLayout";
+
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffSec < 5) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
 
 export default function DashboardPage() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -34,6 +51,7 @@ export default function DashboardPage() {
   const [blockedTaskCount, setBlockedTaskCount] = useState<number>(0);
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
   const [decisionCount, setDecisionCount] = useState<number>(0);
+  const [recentActivity, setRecentActivity] = useState<ActivityEvent[]>([]);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -51,7 +69,7 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const [depts, ags, plns, ctx, projs, tsks, apprs, decs] = await Promise.all([
+          const [depts, ags, plns, ctx, projs, tsks, apprs, decs, acts] = await Promise.all([
             api.getDepartments(primaryCompany.id).catch(() => []),
             api.getAgents(primaryCompany.id).catch(() => []),
             api.getPlans(primaryCompany.id).catch(() => []),
@@ -60,6 +78,7 @@ export default function DashboardPage() {
             api.getTasks(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
             api.getApprovals(primaryCompany.id, { status: "PENDING" }).catch(() => ({ items: [], total: 0 })),
             api.getCompanyDecisions(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+            api.getActivity(primaryCompany.id, { limit: 5 }).catch(() => ({ items: [], total: 0 })),
           ]);
           setDepartmentCount(depts.length);
           setAgentCount(ags.length);
@@ -72,6 +91,7 @@ export default function DashboardPage() {
           setBlockedTaskCount(blocked.length);
           setPendingApprovalCount(apprs.total);
           setDecisionCount(decs.total);
+          setRecentActivity(acts.items);
         } catch {
           setDepartmentCount(0);
           setAgentCount(0);
@@ -82,6 +102,7 @@ export default function DashboardPage() {
           setBlockedTaskCount(0);
           setPendingApprovalCount(0);
           setDecisionCount(0);
+          setRecentActivity([]);
         }
       } else {
         setDepartmentCount(0);
@@ -93,6 +114,7 @@ export default function DashboardPage() {
         setBlockedTaskCount(0);
         setPendingApprovalCount(0);
         setDecisionCount(0);
+        setRecentActivity([]);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -307,38 +329,97 @@ export default function DashboardPage() {
 
           {/* Recent Activity Panel */}
           <div className="rounded-xl border border-[#1e2738] bg-[#111724] p-6 flex flex-col">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1e2738] mb-6">
+            <div className="flex items-center justify-between pb-4 border-b border-[#1e2738] mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <Activity className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-white">Recent Activity</h3>
-                  <p className="text-xs text-slate-400">Audit trail, agent events, and company history</p>
+                  <p className="text-xs text-slate-400">Operational timeline and event feed</p>
                 </div>
               </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                Phase 13
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Phase 13 Active
+                </span>
+              </div>
             </div>
 
-            {/* Honest Empty State */}
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4">
-              <div className="w-12 h-12 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center justify-center mb-4">
-                <Activity className="w-6 h-6" />
+            {recentActivity.length > 0 ? (
+              <div className="flex-1 flex flex-col justify-between">
+                <div className="space-y-3">
+                  {recentActivity.map((event) => {
+                    const isAgent = event.actor_type === "AGENT";
+                    const isOperator = event.actor_type === "USER";
+                    return (
+                      <div
+                        key={event.id}
+                        className="p-3 rounded-lg bg-[#0c1017] border border-[#1e2738] hover:border-slate-700/80 transition-colors flex items-start gap-3 text-xs"
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {isAgent ? (
+                            <div className="p-1.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              <Bot className="w-3.5 h-3.5" />
+                            </div>
+                          ) : isOperator ? (
+                            <div className="p-1.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                              <UserIcon className="w-3.5 h-3.5" />
+                            </div>
+                          ) : (
+                            <div className="p-1.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                              <Activity className="w-3.5 h-3.5" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 truncate">
+                              {event.event_type.replace(/_/g, " ")}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                              {formatRelativeTime(event.created_at)}
+                            </span>
+                          </div>
+                          <p className="text-slate-200 text-xs line-clamp-2 leading-relaxed font-normal">
+                            {event.message}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="pt-4 mt-2 border-t border-[#1e2738]/60 flex justify-end">
+                  <Link
+                    href="/activity"
+                    className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+                  >
+                    <span>View full company activity</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
               </div>
-              <h4 className="text-sm font-semibold text-white mb-1">
-                No Activity Recorded
-              </h4>
-              <p className="text-xs text-slate-400 max-w-sm leading-relaxed mb-4">
-                Real-time event streaming and comprehensive company activity tracking will activate in{" "}
-                <strong className="text-slate-300">Phase 13</strong>. Authentication session events are currently
-                stored authoritatively in PostgreSQL.
-              </p>
-              <span className="text-[11px] font-mono text-slate-400 bg-slate-800/60 px-2.5 py-1 rounded border border-slate-700/60">
-                Awaiting Phase 13 Event Bus
-              </span>
-            </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4">
+                <div className="w-12 h-12 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center justify-center mb-4">
+                  <Activity className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-semibold text-white mb-1">
+                  No Activity Recorded Yet
+                </h4>
+                <p className="text-xs text-slate-400 max-w-sm leading-relaxed mb-4">
+                  Operational company events will appear here as projects, tasks, approvals, and decisions are created or updated.
+                </p>
+                <Link
+                  href="/activity"
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-[#1e2738] bg-[#0c1017] hover:bg-[#182030] text-xs font-medium text-slate-300 hover:text-white transition"
+                >
+                  <span>Open Activity Console</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
