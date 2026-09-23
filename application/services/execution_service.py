@@ -7,6 +7,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from application.services.presence_service import PresenceService
 from domain.runtime.engine import AgentRuntimeEngine
 from domain.runtime.exceptions import (
     AgentInactiveError,
@@ -158,6 +159,17 @@ class ExecutionService:
         task.status = TaskStatus.IN_PROGRESS.value
         task.started_at = datetime.now(UTC)
 
+        # Update agent presence to WORKING per Phase 14
+        presence_svc = PresenceService(self.db)
+        await presence_svc.set_working(
+            company_id=company_id,
+            agent_id=agent.id,
+            task_id=task.id,
+            project_id=task.project_id,
+            activity=f"Executing: {task.title}",
+            current_step="Initializing agent runtime",
+        )
+
         # 8. Create ExecutionRecord in RUNNING state
         execution_record = ExecutionRecord(
             company_id=company_id,
@@ -222,6 +234,12 @@ class ExecutionService:
             execution_record.steps_json = [s.model_dump(mode="json") for s in result.steps]
             execution_record.completed_at = datetime.now(UTC)
 
+            # Revert agent presence to IDLE upon successful execution
+            await presence_svc.set_idle(
+                company_id=company_id,
+                agent_id=agent.id,
+            )
+
         except Exception as exc:
             TaskStateMachine.validate_transition(task.status, TaskStatus.FAILED.value)
             task.status = TaskStatus.FAILED.value
@@ -232,6 +250,14 @@ class ExecutionService:
             )
             execution_record.error_details = str(exc)
             execution_record.completed_at = datetime.now(UTC)
+
+            # Revert agent presence to ERROR upon failure
+            await presence_svc.set_error(
+                company_id=company_id,
+                agent_id=agent.id,
+                task_id=task.id,
+                error_details=str(exc),
+            )
             await self.db.commit()
             raise
 

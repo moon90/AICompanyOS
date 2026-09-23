@@ -1283,6 +1283,99 @@ describe("Web API Client", () => {
     );
   });
 
+  it("getCompanyPresence returns list of agent presences", async () => {
+    const mockPresences = {
+      items: [
+        {
+          id: "pres-1",
+          agent_id: "agent-1",
+          agent_name: "CEO",
+          agent_role: "Executive",
+          company_id: "comp-1",
+          status: "WORKING",
+          current_task_id: "task-1",
+          current_activity: "Planning goals",
+          last_heartbeat_at: "2026-09-23T20:00:00Z",
+          started_at: "2026-09-23T19:50:00Z",
+          updated_at: "2026-09-23T20:00:00Z",
+          duration_seconds: 600,
+          is_stale: false,
+          details: {},
+        },
+      ],
+      total: 1,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockPresences,
+    } as Response);
+
+    const res = await api.getCompanyPresence("comp-1");
+    expect(res.total).toBe(1);
+    expect(res.items[0].status).toBe("WORKING");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/presence",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("getPresenceSummary returns aggregated presence counts", async () => {
+    const mockSummary = {
+      total_agents: 3,
+      working_count: 1,
+      idle_count: 2,
+      waiting_count: 0,
+      blocked_count: 0,
+      error_count: 0,
+      offline_count: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockSummary,
+    } as Response);
+
+    const res = await api.getPresenceSummary("comp-1");
+    expect(res.working_count).toBe(1);
+    expect(res.idle_count).toBe(2);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/presence/summary",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("sendAgentHeartbeat sends POST with check-in payload", async () => {
+    const mockPresence = {
+      id: "pres-1",
+      agent_id: "agent-1",
+      company_id: "comp-1",
+      status: "WORKING",
+      current_step: "Running search",
+      last_heartbeat_at: "2026-09-23T20:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockPresence,
+    } as Response);
+
+    const res = await api.sendAgentHeartbeat("comp-1", "agent-1", {
+      current_step: "Running search",
+    });
+    expect(res.current_step).toBe("Running search");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/agents/agent-1/presence/heartbeat",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ current_step: "Running search" }),
+      })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

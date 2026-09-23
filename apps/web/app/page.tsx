@@ -19,8 +19,25 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { api, Company, SystemStatus, User, ActivityEvent } from "@/lib/api";
+import {
+  api,
+  Company,
+  SystemStatus,
+  User,
+  ActivityEvent,
+  AgentPresence,
+  PresenceSummary,
+} from "@/lib/api";
 import { ShellLayout } from "@/components/shell/ShellLayout";
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins < 60) return `${mins}m ${secs}s`;
+  const hours = Math.floor(mins / 60);
+  return `${hours}h ${mins % 60}m`;
+}
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -52,6 +69,8 @@ export default function DashboardPage() {
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
   const [decisionCount, setDecisionCount] = useState<number>(0);
   const [recentActivity, setRecentActivity] = useState<ActivityEvent[]>([]);
+  const [presenceSummary, setPresenceSummary] = useState<PresenceSummary | null>(null);
+  const [activePresences, setActivePresences] = useState<AgentPresence[]>([]);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -69,17 +88,22 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const [depts, ags, plns, ctx, projs, tsks, apprs, decs, acts] = await Promise.all([
-            api.getDepartments(primaryCompany.id).catch(() => []),
-            api.getAgents(primaryCompany.id).catch(() => []),
-            api.getPlans(primaryCompany.id).catch(() => []),
-            api.getCeoContext(primaryCompany.id).catch(() => null),
-            api.getProjects(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
-            api.getTasks(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
-            api.getApprovals(primaryCompany.id, { status: "PENDING" }).catch(() => ({ items: [], total: 0 })),
-            api.getCompanyDecisions(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
-            api.getActivity(primaryCompany.id, { limit: 5 }).catch(() => ({ items: [], total: 0 })),
-          ]);
+          const [depts, ags, plns, ctx, projs, tsks, apprs, decs, acts, presSumm, presList] =
+            await Promise.all([
+              api.getDepartments(primaryCompany.id).catch(() => []),
+              api.getAgents(primaryCompany.id).catch(() => []),
+              api.getPlans(primaryCompany.id).catch(() => []),
+              api.getCeoContext(primaryCompany.id).catch(() => null),
+              api.getProjects(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+              api.getTasks(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+              api
+                .getApprovals(primaryCompany.id, { status: "PENDING" })
+                .catch(() => ({ items: [], total: 0 })),
+              api.getCompanyDecisions(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+              api.getActivity(primaryCompany.id, { limit: 5 }).catch(() => ({ items: [], total: 0 })),
+              api.getPresenceSummary(primaryCompany.id).catch(() => null),
+              api.getCompanyPresence(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+            ]);
           setDepartmentCount(depts.length);
           setAgentCount(ags.length);
           setPlanCount(plns.length);
@@ -92,6 +116,8 @@ export default function DashboardPage() {
           setPendingApprovalCount(apprs.total);
           setDecisionCount(decs.total);
           setRecentActivity(acts.items);
+          setPresenceSummary(presSumm);
+          setActivePresences(presList.items);
         } catch {
           setDepartmentCount(0);
           setAgentCount(0);
@@ -103,6 +129,8 @@ export default function DashboardPage() {
           setPendingApprovalCount(0);
           setDecisionCount(0);
           setRecentActivity([]);
+          setPresenceSummary(null);
+          setActivePresences([]);
         }
       } else {
         setDepartmentCount(0);
@@ -115,6 +143,8 @@ export default function DashboardPage() {
         setPendingApprovalCount(0);
         setDecisionCount(0);
         setRecentActivity([]);
+        setPresenceSummary(null);
+        setActivePresences([]);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -174,13 +204,27 @@ export default function DashboardPage() {
     },
     {
       title: "Active Agents",
-      value: "0",
-      subtext: agentCount > 0 ? `${agentCount} registered (0 runtime active)` : "No active agents",
-      phaseNote: "Runtime Presence scheduled for Phase 14",
+      value: presenceSummary ? presenceSummary.working_count.toString() : "0",
+      subtext:
+        presenceSummary && presenceSummary.working_count > 0
+          ? `${presenceSummary.working_count} active (${presenceSummary.idle_count} idle)`
+          : agentCount > 0
+          ? `${agentCount} registered (all idle)`
+          : "No active agents",
+      phaseNote: "Phase 14 Presence Active",
       icon: Users,
-      accentColor: "text-emerald-400",
-      bgColor: "bg-emerald-500/10",
-      borderColor: "border-emerald-500/20",
+      accentColor:
+        presenceSummary && presenceSummary.working_count > 0
+          ? "text-emerald-400"
+          : "text-slate-400",
+      bgColor:
+        presenceSummary && presenceSummary.working_count > 0
+          ? "bg-emerald-500/10"
+          : "bg-slate-800/40",
+      borderColor:
+        presenceSummary && presenceSummary.working_count > 0
+          ? "border-emerald-500/20"
+          : "border-slate-700/40",
     },
   ];
 
@@ -421,6 +465,155 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Who is working now? Panel per docs/Phases.md § 18 */}
+        <div className="rounded-xl border border-[#1e2738] bg-[#111724] p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-[#1e2738] mb-6">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white">Who is working now?</h3>
+                  {presenceSummary && presenceSummary.working_count > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      {presenceSummary.working_count} Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400">
+                  Real-time agent presence, active task execution, and operational focus
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Phase 14 Active
+              </span>
+              <Link
+                href="/agents"
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-medium inline-flex items-center gap-1 transition"
+              >
+                <span>Agent Registry</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          {activePresences.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activePresences.map((presence) => {
+                const isWorking = presence.status === "WORKING";
+                const isIdle = presence.status === "IDLE";
+                const isWaiting = presence.status === "WAITING";
+                const isBlocked = presence.status === "BLOCKED";
+                const isError = presence.status === "ERROR";
+
+                const badgeBg = isWorking
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                  : isWaiting
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  : isBlocked
+                  ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                  : isError
+                  ? "bg-red-500/10 text-red-400 border-red-500/30"
+                  : "bg-slate-800 text-slate-400 border-slate-700";
+
+                return (
+                  <div
+                    key={presence.id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isWorking
+                        ? "bg-[#0d141e] border-emerald-500/30 shadow-sm"
+                        : "bg-[#0c1017] border-[#1e2738] hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                            isWorking
+                              ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
+                              : "bg-slate-800 border-slate-700 text-slate-400"
+                          }`}
+                        >
+                          <Bot className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-semibold text-white truncate">
+                            {presence.agent_name}
+                          </h4>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {presence.agent_role}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono border shrink-0 ${badgeBg}`}
+                      >
+                        {isWorking && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        )}
+                        <span>{presence.status}</span>
+                      </span>
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t border-[#1e2738]/60 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-medium">Activity:</span>
+                        <span className="text-slate-200 font-medium truncate max-w-[180px]">
+                          {presence.current_activity || (isIdle ? "Idle · Awaiting Task" : "Standby")}
+                        </span>
+                      </div>
+
+                      {presence.current_task_title && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400 font-medium">Task:</span>
+                          <span className="text-indigo-400 truncate max-w-[180px]" title={presence.current_task_title}>
+                            {presence.current_task_title}
+                          </span>
+                        </div>
+                      )}
+
+                      {isWorking && presence.duration_seconds > 0 && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400 font-medium">Active Duration:</span>
+                          <span className="font-mono text-emerald-400">
+                            {formatDuration(presence.duration_seconds)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-center py-8 px-4">
+              <div className="w-12 h-12 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center justify-center mb-3">
+                <Users className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-semibold text-white mb-1">
+                No Agents Registered
+              </h4>
+              <p className="text-xs text-slate-400 max-w-sm mb-4">
+                Register specialist agents in the Agent Registry to monitor real-time execution presence.
+              </p>
+              <Link
+                href="/agents"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition"
+              >
+                <span>Register Agent</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Live System Readiness & Telemetry Panel */}

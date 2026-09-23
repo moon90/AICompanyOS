@@ -16,6 +16,7 @@ from apps.api.routes.delegation import router as delegation_router
 from apps.api.routes.execution import router as execution_router
 from apps.api.routes.health import router as health_router
 from apps.api.routes.memory import router as memory_router
+from apps.api.routes.presence import router as presence_router
 from apps.api.routes.project import router as project_router
 from apps.api.routes.system import router as system_router
 from apps.api.routes.task import router as task_router
@@ -72,6 +73,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(approval_router)
     application.include_router(memory_router)
     application.include_router(activity_router)
+    application.include_router(presence_router)
 
     return application
 

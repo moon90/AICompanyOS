@@ -239,6 +239,11 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    agent_presences: Mapped[list["AgentPresence"]] = relationship(
+        "AgentPresence",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -437,6 +442,12 @@ class Agent(Base):
         "CompanyDecision",
         back_populates="decided_by_agent",
         foreign_keys="CompanyDecision.decided_by_agent_id",
+    )
+    presence: Mapped["AgentPresence | None"] = relationship(
+        "AgentPresence",
+        uselist=False,
+        back_populates="agent",
+        cascade="all, delete-orphan",
     )
 
 
@@ -699,6 +710,11 @@ class Project(Base):
         "ActivityEvent",
         back_populates="project",
     )
+    active_presences: Mapped[list["AgentPresence"]] = relationship(
+        "AgentPresence",
+        back_populates="current_project",
+        foreign_keys="AgentPresence.current_project_id",
+    )
 
 
 class Task(Base):
@@ -858,6 +874,11 @@ class Task(Base):
     activity_events: Mapped[list["ActivityEvent"]] = relationship(
         "ActivityEvent",
         back_populates="task",
+    )
+    active_presences: Mapped[list["AgentPresence"]] = relationship(
+        "AgentPresence",
+        back_populates="current_task",
+        foreign_keys="AgentPresence.current_task_id",
     )
 
 
@@ -1496,3 +1517,95 @@ Index(
     ActivityEvent.actor_id,
 )
 Index("ix_activity_events_event_type", ActivityEvent.company_id, ActivityEvent.event_type)
+
+
+class AgentPresence(Base):
+    """Authoritative agent presence entity adhering to docs/Phases.md Section 18 and docs/Memory.md Section 20."""
+
+    __tablename__ = "agent_presences"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="IDLE",
+        server_default="IDLE",
+    )
+    current_task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    current_project_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    current_activity: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    current_step: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    last_heartbeat_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+
+    # Relationships
+    agent: Mapped["Agent"] = relationship("Agent", back_populates="presence")
+    company: Mapped["Company"] = relationship("Company", back_populates="agent_presences")
+    current_task: Mapped["Task | None"] = relationship(
+        "Task",
+        foreign_keys=[current_task_id],
+        back_populates="active_presences",
+    )
+    current_project: Mapped["Project | None"] = relationship(
+        "Project",
+        foreign_keys=[current_project_id],
+        back_populates="active_presences",
+    )
+
+
+Index("ix_agent_presence_company_status", AgentPresence.company_id, AgentPresence.status)
+Index(
+    "ix_agent_presence_company_heartbeat", AgentPresence.company_id, AgentPresence.last_heartbeat_at
+)

@@ -1,6 +1,5 @@
-"""Application service for Agent Registry management and organizational hierarchy."""
-
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -18,6 +17,7 @@ from domain.agents.exceptions import (
 from infrastructure.database.models import (
     Agent,
     AgentDefinition,
+    AgentPresence,
     CompanyMember,
     Department,
 )
@@ -212,6 +212,18 @@ class AgentService:
             is_current=True,
         )
         self.session.add(initial_def)
+
+        # Create initial AgentPresence (IDLE for active, OFFLINE for inactive) per Phase 14
+        presence = AgentPresence(
+            id=str(uuid.uuid4()),
+            agent_id=agent.id,
+            company_id=company_id,
+            status="IDLE" if agent.status == "active" else "OFFLINE",
+            last_heartbeat_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            details={},
+        )
+        self.session.add(presence)
         await self.session.commit()
 
         return await self.get_agent(company_id, agent.id, user_id)

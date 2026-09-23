@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 13 — Activity History** (COMPLETE)
+**Phase 14 — Agent Presence** (COMPLETE)
 
 ---
 
@@ -634,21 +634,69 @@
   * **Production Build:**
     - `npm run build` compiled all 15 routes cleanly with zero TypeScript or ESLint errors.
 
+### Phase 14 — Agent Presence (COMPLETE)
+* **Authoritative Persistence & Database Models (`infrastructure/database/models.py`):**
+  * Defined `AgentPresence` model tracking runtime operational state: `id`, `agent_id`, `company_id`, `status` (`ONLINE`, `IDLE`, `WORKING`, `WAITING`, `BLOCKED`, `ERROR`, `OFFLINE`), `current_task_id`, `current_project_id`, `current_activity`, `current_step`, `last_heartbeat_at`, `started_at`, `updated_at`, `details`.
+  * Added entity relationships: `Agent.presence` (1:1), `Company.agent_presences` (1:N), `Project.active_presences` (1:N), `Task.active_presences` (1:N).
+  * Compound performance indexes: `ix_agent_presence_company_status` (`company_id`, `status`) and `ix_agent_presence_company_heartbeat` (`company_id`, `last_heartbeat_at`).
+* **Database Migrations:**
+  * Created Alembic migration `0013_create_agent_presence.py` with automatic backfill of presence records for all existing agents (`IDLE` if active, `OFFLINE` if inactive).
+  * Validated complete downgrade rollback and re-upgrade with verified zero schema drift (`alembic check`).
+* **Domain Layer (`domain/presence/`):**
+  * `PresenceStatus` (StrEnum): `ONLINE`, `IDLE`, `WORKING`, `WAITING`, `BLOCKED`, `ERROR`, `OFFLINE`.
+  * Pydantic schemas: `AgentPresenceResponse`, `PresenceSummaryResponse`, `HeartbeatRequest`, `PresenceUpdateParams`.
+  * Domain exceptions: `PresenceError`, `PresenceNotFoundError`, `PresenceAccessDeniedError`, `InvalidPresenceStateError`.
+* **Application Service & Stale Awareness (`application/services/presence_service.py`):**
+  * Implemented `PresenceService`: `get_company_presence`, `get_agent_presence`, `get_presence_summary`, `record_heartbeat`, `set_working`, `set_idle`, `set_waiting`, `set_error`, `evaluate_stale_presence`, `sync_all_agent_presences`, `update_presence_status`.
+  * **Stale Awareness (`docs/Memory.md` § 20):** Operational state is temporary telemetry, not permanent history. If an agent stops reporting / heartbeat expires (> 60s configurable threshold), the service dynamically resets operational status to `IDLE` (or `OFFLINE`), ensuring the system never assumes an agent is working when not actively reporting.
+  * Implemented `_ensure_utc()` datetime normalization resolving timezone discrepancies between SQLite and PostgreSQL.
+* **Lifecycle & Operational Integration:**
+  * `AgentService`: Registers initial `AgentPresence` upon agent creation.
+  * `ExecutionService`: Sets status to `WORKING` with task/project details on `execute_task`, and cleanly resets to `IDLE` upon completion or `ERROR` upon failure.
+  * `SystemService`: Updated `CURRENT_PHASE = "Phase 14 — Agent Presence"`.
+* **API Layer (`apps/api/`):**
+  * Created Pydantic schemas in `apps/api/schemas/presence.py`.
+  * Created routes in `apps/api/routes/presence.py` mounted under `/api/v1/companies/{company_id}`:
+    - `GET /presence`: list company agent presences with stale awareness.
+    - `GET /presence/summary`: lightweight counters for executive dashboard.
+    - `GET /agents/{agent_id}/presence`: single agent telemetry.
+    - `POST /agents/{agent_id}/presence/heartbeat`: heartbeat reporting endpoint.
+    - `PATCH /agents/{agent_id}/presence`: operator override endpoint.
+* **Frontend Presence & Telemetry Integration (`apps/web/`):**
+  * **API Client & Tests (`apps/web/lib/api.ts`, `apps/web/lib/api.test.ts`):**
+    - Added `PresenceStatus`, `AgentPresence`, `PresenceListResponse`, `PresenceSummary` interfaces.
+    - Added client methods `getCompanyPresence`, `getPresenceSummary`, `getAgentPresence`, `sendAgentHeartbeat`, `updateAgentPresence`.
+    - Added Vitest unit tests for all presence methods; 39/39 tests passing.
+  * **Executive Dashboard (`apps/web/app/page.tsx`):**
+    - "Active Agents" metric card transitions from static `0` placeholder to dynamic `presenceSummary.working_count`.
+    - Added dedicated **"Who is working now?"** operational panel showing active agent roster, status dots, task/project links, and active working duration.
+  * **Agent Registry (`apps/web/app/agents/page.tsx`):**
+    - Executive Header badge updated to `Phase 14 Active: Agent Presence`.
+    - Top stats cards displaying live counts: Registered Agents, Working Now, Idle / Standby, Attention / Waiting.
+    - Filter bar with presence dropdown: All Presences, ● Working, ○ Idle, ◐ Waiting, ! Attention Required, — Offline.
+    - Agent cards display real-time status badges, operational activity strings, direct task links, active execution duration, and heartbeat status with staleness alerts.
+    - Agent Detail Drawer includes real-time telemetry panel and operator override selector.
+  * **Sidebar Navigation (`apps/web/components/shell/Sidebar.tsx`):**
+    - Updated Agent Registry nav badge to `Phase 14`.
+    - Updated Phase Boundary Widget to `Phase 14 Active: Agent Presence`.
+  * **Production Build:**
+    - `npm run build` compiled all 15 routes cleanly with zero TypeScript or ESLint errors.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (156 passed in 17.12s) |
-| **Activity Tests** | `pytest tests/unit/test_activity_service.py tests/integration/test_api_activity.py` | **PASSED** (7 tests in 1.37s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 185 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (185 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (177 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (36 tests in 2 files in 279ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (165 passed in 18.46s) |
+| **Presence Tests** | `pytest tests/unit/test_presence_service.py tests/integration/test_api_presence.py` | **PASSED** (9 tests in 1.45s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 194 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (194 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (186 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (39 tests in 2 files in 245ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (15 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0012` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0013` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
 | **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all queries) |
 
@@ -656,19 +704,19 @@
 
 ## Important Architectural Decisions
 
-1. **Activity History vs. Audit Log Distinction (`docs/Architecture.md` § 14, `docs/Phases.md` § 17):**
-   Activity History provides a human-readable, reverse-chronological operational company narrative (*"Task assigned to CMO"*, *"Approval granted for Tool Execution"*), distinct from low-level technical audit logs (raw cryptographic signatures, HTTP wire payloads).
-2. **Non-Invasive Lifecycle Hook Integration:**
-   Activity events are emitted at the application service boundaries during key state mutations (`ProjectService`, `TaskService`, `ApprovalService`, `MemoryService`) without coupling domain entities to the event logging subsystem.
-3. **Compound Indexes for Query Performance:**
-   Database indexes on `(company_id, created_at DESC)` and scoped pairs `(company_id, project_id, created_at DESC)`, `(company_id, task_id, created_at DESC)` ensure sub-millisecond timeline retrieval even as event volume scales.
-4. **Active Agent Presence Remains 0:**
-   Active agent presence and long-lived autonomous execution loops remain strictly at 0, reserved for Phase 14.
+1. **Presence is Operational State, Not Permanent History (`docs/Memory.md` § 20):**
+   Agent Presence answers the real-time operational question: *"Who is working right now?"* Presence is dynamic and mutable, backed by heartbeats and execution state, unlike immutable Activity History.
+2. **Stale-Aware Telemetry:**
+   If an agent stops reporting or its heartbeat expires (> 60s threshold), the system never assumes the agent is still working; it dynamically resets to `IDLE` (or `OFFLINE`).
+3. **Operational Language Only (`docs/UI.md` § 76):**
+   The UI strictly avoids anthropomorphic jargon, utilizing operational language: *Planning*, *Executing*, *Waiting*, *Blocked*, *Failed*.
+4. **Active Agents Dashboard Counter Activated:**
+   The Executive Dashboard "Active Agents" metric card transitions from a static placeholder to an authoritative live counter of agents with `WORKING` status.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 14 — Autonomous Execution Loop**
+**Phase 15 — Error & Bug Management**
 *(Awaiting user authorization before proceeding).*
 

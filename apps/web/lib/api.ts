@@ -1395,7 +1395,127 @@ export const api = {
       { method: "GET" }
     );
   },
+
+  async getCompanyPresence(
+    companyId: string,
+    staleThresholdSeconds?: number
+  ): Promise<PresenceListResponse> {
+    const qs = staleThresholdSeconds
+      ? `?stale_threshold_seconds=${staleThresholdSeconds}`
+      : "";
+    return request<PresenceListResponse>(
+      `/api/v1/companies/${companyId}/presence${qs}`,
+      { method: "GET" }
+    );
+  },
+
+  async getPresenceSummary(
+    companyId: string,
+    staleThresholdSeconds?: number
+  ): Promise<PresenceSummary> {
+    const qs = staleThresholdSeconds
+      ? `?stale_threshold_seconds=${staleThresholdSeconds}`
+      : "";
+    return request<PresenceSummary>(
+      `/api/v1/companies/${companyId}/presence/summary${qs}`,
+      { method: "GET" }
+    );
+  },
+
+  async getAgentPresence(
+    companyId: string,
+    agentId: string
+  ): Promise<AgentPresence> {
+    return request<AgentPresence>(
+      `/api/v1/companies/${companyId}/agents/${agentId}/presence`,
+      { method: "GET" }
+    );
+  },
+
+  async sendAgentHeartbeat(
+    companyId: string,
+    agentId: string,
+    data: {
+      current_step?: string;
+      current_activity?: string;
+      details?: Record<string, unknown>;
+    }
+  ): Promise<AgentPresence> {
+    return request<AgentPresence>(
+      `/api/v1/companies/${companyId}/agents/${agentId}/presence/heartbeat`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async updateAgentPresence(
+    companyId: string,
+    agentId: string,
+    data: {
+      status: PresenceStatus;
+      current_activity?: string;
+      current_step?: string;
+      details?: Record<string, unknown>;
+    }
+  ): Promise<AgentPresence> {
+    return request<AgentPresence>(
+      `/api/v1/companies/${companyId}/agents/${agentId}/presence`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  },
 };
+
+export type PresenceStatus =
+  | "ONLINE"
+  | "IDLE"
+  | "WORKING"
+  | "WAITING"
+  | "BLOCKED"
+  | "ERROR"
+  | "OFFLINE";
+
+export interface AgentPresence {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_role: string;
+  department_id?: string | null;
+  department_name?: string | null;
+  company_id: string;
+  status: PresenceStatus;
+  current_task_id?: string | null;
+  current_task_title?: string | null;
+  current_project_id?: string | null;
+  current_project_name?: string | null;
+  current_activity?: string | null;
+  current_step?: string | null;
+  last_heartbeat_at: string;
+  started_at?: string | null;
+  updated_at: string;
+  duration_seconds: number;
+  is_stale: boolean;
+  details: Record<string, unknown>;
+}
+
+export interface PresenceListResponse {
+  items: AgentPresence[];
+  total: number;
+}
+
+export interface PresenceSummary {
+  total_agents: number;
+  working_count: number;
+  idle_count: number;
+  waiting_count: number;
+  blocked_count: number;
+  error_count: number;
+  offline_count: number;
+}
 
 export interface ActivityEvent {
   id: string;
