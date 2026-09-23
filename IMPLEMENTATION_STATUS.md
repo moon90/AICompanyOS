@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 11 — Basic Memory & Company State** (COMPLETE)
+**Phase 12 — Kanban Boards** (COMPLETE)
 
 ---
 
@@ -524,44 +524,88 @@
     * Mode 2: Grounded Memory & Knowledge Q&A Console (interactive CEO inquiry console with grounded citations, live company state inspector, decision registry with immutable supersedence modal, audit provenance tracking).
   * Verified production build: all 15 routes compiled with 0 TypeScript/ESLint warnings or errors.
 
+### Phase 12 — Kanban Boards (COMPLETE)
+* **Core Philosophy (`docs/Phases.md` § 16, `docs/Architecture.md`):**
+  * Kanban is strictly an authoritative **view of task state**, not a secondary task system.
+  * No secondary database table for Kanban was created; `tasks` and `projects` remain the single source of truth in PostgreSQL.
+  * All status updates (including drag-and-drop actions) must traverse and validate against the backend `TaskStateMachine` (`domain/work/state_machine.py`) with zero client-side bypasses.
+* **Backend Application Service & API (`application/services/project_service.py`, `apps/api/`):**
+  * Added `get_project_board(user_id, company_id, project_id)` to `ProjectService`:
+    * Verifies project existence and multi-tenant company membership.
+    * Loads all tasks belonging to the project with joined eager-loading for relationships (`assignee_agent`, `owner_user`, `dependencies`).
+    * Groups tasks into 7 canonical columns: `READY`, `IN_PROGRESS`, `WAITING`, `BLOCKED`, `VERIFYING`, `COMPLETED`, and `ARCHIVED` (aggregating `FAILED` and `CANCELLED`).
+    * Computes real-time rollup stats: `total_tasks`, `completed_tasks`, `in_progress_tasks`, `waiting_tasks`, `blocked_tasks`, `completion_rate`.
+    * Computes `allowed_transitions` mapping directly from `TaskStateMachine.ALLOWED_TRANSITIONS` for runtime frontend guidance.
+  * Created Pydantic schemas in `apps/api/schemas/work.py`: `KanbanColumn`, `BoardSummaryStats`, `ProjectBoardResponse`.
+  * Added endpoint `GET /api/v1/companies/{company_id}/projects/{project_id}/board` in `apps/api/routes/project.py`.
+  * Updated `SystemService` to report `CURRENT_PHASE = "Phase 12 — Kanban Boards"`.
+* **Backend Automated Testing:**
+  * Added unit test suite in `tests/unit/test_project_board.py` (5 tests): column partitioning, empty boards, rollup statistics calculation, relationship serialization, allowed transition mapping.
+  * Added integration test suite in `tests/integration/test_api_board.py` (4 tests): unauthenticated 401, multi-tenant isolation 404, valid board retrieval 200, invalid project 404.
+  * Updated system telemetry assertions in `tests/unit/test_system_service.py` and `tests/integration/test_api_system.py`.
+  * Full test suite: 149 passed in 15.80s.
+  * Zero ruff lint/format errors across 176 files.
+  * Zero mypy static type errors across 168 source files.
+* **Frontend Kanban Console (`apps/web/`):**
+  * **API Client & Tests (`apps/web/lib/api.ts`, `apps/web/lib/api.test.ts`):**
+    * Added `KanbanColumn`, `BoardSummaryStats`, `ProjectBoardResponse` TypeScript interfaces.
+    * Added `api.getProjectBoard(companyId, projectId)` client method.
+    * Added unit test for `getProjectBoard`; 34/34 vitest unit tests passing.
+  * **Interactive Board Page (`apps/web/app/projects/[id]/board/page.tsx`):**
+    * Project Switcher: seamless switching between projects in the company.
+    * Search & Filters: search query, priority filter, assignee filter, department filter, only blocked filter, clear filters button.
+    * Summary Metrics Header: displays total tasks, in-progress, blocked, completed, and completion rate progress bar.
+    * 6 Canonical Columns + Optional Archived Column: `READY`, `IN_PROGRESS`, `WAITING`, `BLOCKED`, `VERIFYING`, `COMPLETED`, with optional toggle for `ARCHIVED` (`FAILED` / `CANCELLED`).
+    * HTML5 Drag-and-Drop:
+      - Native drag handlers with drag-over column styling.
+      - Optimistic card movement for fluid executive user experience.
+      - Direct state machine integration via `PATCH /api/v1/companies/{company_id}/tasks/{task_id}/status`.
+      - Backend validation enforced: Invalid transitions reject with 400 Bad Request; UI automatically rolls back card and presents an executive alert detailing valid transitions.
+    * Task Cards: title, priority badge, department badge, assignee avatar/name, dependency indicator with blocked count, deadline with overdue indicator.
+    * Task Inspection Drawer: full objective, description, priority, deadline, status badge, prerequisites checklist with visual state, and allowed transitions quick-action dropdown.
+    * Quick Task Creation Modal: directly create tasks on the board with pre-populated project ID.
+  * **Projects List & Tasks Navigation Integration:**
+    * Updated `apps/web/app/projects/page.tsx`: added "Board →" link on project cards and "Open Kanban Board" button in the project details drawer.
+    * Updated `apps/web/app/tasks/page.tsx`: added "Kanban Board" link in top action toolbar.
+    * Updated `apps/web/components/shell/Sidebar.tsx`: updated Projects nav link to match subroutes and updated Phase badge to `Phase 12`.
+    * Updated `apps/web/app/page.tsx`: dynamic `current_phase` header badge and Kanban-active metric notes.
+  * **Production Build:**
+    * `npm run build` compiled all 15 routes cleanly with zero TypeScript or ESLint errors.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (140 passed in 14.05s) |
-| **Memory Domain & Decision Tests** | `pytest tests/unit/test_memory*.py tests/unit/test_ceo_grounded_qa.py tests/integration/test_api_memory.py` | **PASSED** (19 tests in 2.12s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 174 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (174 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (166 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (33 tests in 2 files in 260ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (149 passed in 15.80s) |
+| **Project & Board Tests** | `pytest tests/unit/test_project*.py tests/integration/test_api_board.py` | **PASSED** (12 tests in 2.50s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 176 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (176 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (168 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (34 tests in 2 files in 260ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (15 routes compiled, static generation verified) |
 | **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0011` applied on PostgreSQL) |
-| **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected) |
-| **Grounded CEO Q&A Integrity** | Automated & Live API | **PASSED** (Cites active PostgreSQL state, 0 hallucinations, immutable decision supersedence) |
+| **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
+| **State Machine Enforcement** | Automated & Live API | **PASSED** (Invalid transitions rejected with 400 Bad Request; UI card rollback verified) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **Immutable Decision Supersedence (`docs/Memory.md` § 33–34):**
-   Decisions are never hard-deleted or silently rewritten. Every change creates a new `ACTIVE` decision while transitioning the old decision to `SUPERSEDED` and linking its `superseded_by_decision_id` foreign key. An ordered session flush guarantees database referential integrity during update.
-2. **Strict Grounding & Zero Hallucination (`docs/Memory.md` § 59–60):**
-   CEO Q&A answers questions strictly from live operational state retrieved from PostgreSQL (departments, agents, projects, tasks, execution records, approvals, and decisions). Every response includes authoritative `citations` referencing source entities.
-3. **Multi-Tenancy Memory Isolation:**
-   All memory and decision queries strictly filter by `company_id`. Cross-tenant decision lookup raises `MemoryAccessDeniedError` / `403 Forbidden`.
-4. **Runtime Active Presence Remains 0:**
-   Active agent presence and long-lived background loops remain strictly at 0, reserved for Phase 14.
+1. **Kanban as a Projection of Task State (`docs/Phases.md` § 16):**
+   Kanban is strictly an authoritative projection/view of task state, not a second task system. No secondary database tables or separate Kanban states exist.
+2. **State Machine Validation on Drag-and-Drop:**
+   All column transitions initiated via drag-and-drop or modal trigger `PATCH /api/v1/companies/{company_id}/tasks/{task_id}/status` and must satisfy `TaskStateMachine.validate_transition()`. Invalid transitions are rejected at the application service layer with `TaskInvalidStateTransitionError` (400 Bad Request).
+3. **Optimistic Updates with Safe Rollback:**
+   The frontend Kanban board performs optimistic card movement for responsive user interaction, but captures pre-drag state and rolls back automatically if the backend rejects the transition, notifying the operator of valid transition paths.
+4. **Active Agent Presence Remains 0:**
+   Active agent presence and long-lived autonomous execution loops remain strictly at 0, reserved for Phase 14.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 12 — Specialized Department Workflows**
+**Phase 13 — Activity History**
 *(Awaiting user authorization before proceeding).*
-
-
-
-

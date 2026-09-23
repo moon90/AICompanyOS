@@ -258,6 +258,31 @@ export interface ProjectListResponse {
   total: number;
 }
 
+export interface KanbanColumn {
+  id: string;
+  title: string;
+  statuses: string[];
+  color: string;
+  task_count: number;
+}
+
+export interface BoardSummaryStats {
+  total_tasks: number;
+  completed_tasks: number;
+  in_progress_tasks: number;
+  waiting_tasks: number;
+  blocked_tasks: number;
+  completion_rate: number;
+}
+
+export interface ProjectBoardResponse {
+  project: Project;
+  columns: KanbanColumn[];
+  tasks: Task[];
+  allowed_transitions: Record<string, string[]>;
+  summary: BoardSummaryStats;
+}
+
 export interface TaskDependency {
   id: string;
   task_id: string;
@@ -815,6 +840,13 @@ export const api = {
     return request<Project>(`/api/v1/companies/${companyId}/projects/${projectId}`, {
       method: "GET",
     });
+  },
+
+  async getProjectBoard(companyId: string, projectId: string): Promise<ProjectBoardResponse> {
+    return request<ProjectBoardResponse>(
+      `/api/v1/companies/${companyId}/projects/${projectId}/board`,
+      { method: "GET" }
+    );
   },
 
   async updateProject(

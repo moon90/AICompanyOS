@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
@@ -366,7 +367,14 @@ export default function ProjectsPage() {
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2">
                       <span>{stats?.total_tasks || 0} total tasks</span>
-                      <span>{stats?.completed_tasks || 0} completed</span>
+                      <Link
+                        href={`/projects/${project.id}/board`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:text-primary-hover font-medium flex items-center gap-1 group-hover:underline"
+                      >
+                        <Layers className="h-3 w-3" />
+                        Board →
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -502,17 +510,26 @@ export default function ProjectsPage() {
               </div>
 
               {/* Actions */}
-              <div className="pt-6 border-t border-zinc-800 flex justify-between gap-3">
-                <button
-                  onClick={() => handleDeleteProject(selectedProject.id)}
-                  className="px-4 py-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 text-sm font-medium rounded-lg inline-flex items-center gap-2 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Project
-                </button>
+              <div className="pt-6 border-t border-zinc-800 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/projects/${selectedProject.id}/board`}
+                    className="px-3.5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-lg inline-flex items-center gap-1.5 shadow-sm transition"
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                    Open Board
+                  </Link>
+                  <button
+                    onClick={() => handleDeleteProject(selectedProject.id)}
+                    className="px-3 py-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 text-xs font-medium rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                </div>
                 <button
                   onClick={() => setSelectedProject(null)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium rounded-lg"
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg"
                 >
                   Close
                 </button>

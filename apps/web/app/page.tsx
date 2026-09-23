@@ -111,7 +111,7 @@ export default function DashboardPage() {
       title: "Active Projects",
       value: projectCount.toString(),
       subtext: projectCount > 0 ? `${projectCount} active projects in portfolio` : "No active projects",
-      phaseNote: "Phase 8 Active",
+      phaseNote: "Phase 12 Kanban Active",
       icon: FolderGit2,
       accentColor: "text-blue-400",
       bgColor: "bg-blue-500/10",
@@ -121,7 +121,7 @@ export default function DashboardPage() {
       title: "Open Tasks",
       value: openTaskCount.toString(),
       subtext: openTaskCount > 0 ? `${openTaskCount} tasks in execution pipeline` : "No open tasks",
-      phaseNote: "Phase 8 Active",
+      phaseNote: "Phase 12 Kanban Active",
       icon: CheckSquare,
       accentColor: "text-indigo-400",
       bgColor: "bg-indigo-500/10",
@@ -173,7 +173,7 @@ export default function DashboardPage() {
                 {activeCompany ? activeCompany.name : "Executive Dashboard"}
               </h1>
               <span className="text-xs font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                Phase 8 Active
+                {systemStatus?.current_phase || "Phase 12 Active"}
               </span>
               {activeCompany?.industry && (
                 <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">

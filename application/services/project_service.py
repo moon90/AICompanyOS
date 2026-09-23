@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,12 +13,13 @@ from domain.work.exceptions import (
     ProjectNotFoundError,
     WorkAccessDeniedError,
 )
-from domain.work.state_machine import ProjectPriority, ProjectStatus
+from domain.work.state_machine import ProjectPriority, ProjectStatus, TaskStateMachine, TaskStatus
 from infrastructure.database.models import (
     Agent,
     CompanyMember,
     Project,
     Task,
+    TaskDependency,
 )
 
 
@@ -299,3 +301,165 @@ class ProjectService:
 
         await self.db.delete(project)
         await self.db.commit()
+
+    async def get_project_board(
+        self,
+        user_id: str,
+        company_id: str,
+        project_id: str,
+    ) -> dict[str, Any]:
+        """Fetch project details, tasks, columns, and allowed transitions for the Kanban board."""
+        await self._verify_membership(user_id, company_id)
+
+        # 1. Fetch Project with owner details
+        proj_query = (
+            select(Project)
+            .where(
+                Project.id == project_id,
+                Project.company_id == company_id,
+            )
+            .options(
+                selectinload(Project.owner_agent),
+                selectinload(Project.owner_user),
+            )
+        )
+        proj_res = await self.db.execute(proj_query)
+        project = proj_res.scalars().first()
+        if not project:
+            raise ProjectNotFoundError(
+                f"Project '{project_id}' not found in company '{company_id}'."
+            )
+
+        # 2. Fetch Tasks belonging to this project
+        task_query = (
+            select(Task)
+            .where(
+                Task.project_id == project_id,
+                Task.company_id == company_id,
+            )
+            .options(
+                selectinload(Task.assigned_agent),
+                selectinload(Task.assigned_user),
+                selectinload(Task.department),
+                selectinload(Task.project),
+                selectinload(Task.subtasks),
+                selectinload(Task.dependencies).selectinload(TaskDependency.depends_on_task),
+            )
+            .order_by(Task.priority.desc(), Task.created_at.asc())
+        )
+        task_res = await self.db.execute(task_query)
+        tasks = list(task_res.scalars().all())
+
+        # 3. Canonical Kanban Columns configuration (docs/Phases.md Section 16)
+        column_configs = [
+            {
+                "id": "READY",
+                "title": "Ready",
+                "statuses": [
+                    TaskStatus.CREATED.value,
+                    TaskStatus.PLANNED.value,
+                    TaskStatus.READY.value,
+                ],
+                "color": "blue",
+            },
+            {
+                "id": "IN_PROGRESS",
+                "title": "In Progress",
+                "statuses": [
+                    TaskStatus.ASSIGNED.value,
+                    TaskStatus.IN_PROGRESS.value,
+                ],
+                "color": "amber",
+            },
+            {
+                "id": "WAITING",
+                "title": "Waiting & Approvals",
+                "statuses": [
+                    TaskStatus.WAITING.value,
+                    TaskStatus.APPROVAL_REQUIRED.value,
+                ],
+                "color": "yellow",
+            },
+            {
+                "id": "BLOCKED",
+                "title": "Blocked",
+                "statuses": [TaskStatus.BLOCKED.value],
+                "color": "red",
+            },
+            {
+                "id": "VERIFYING",
+                "title": "Verifying",
+                "statuses": [TaskStatus.VERIFYING.value],
+                "color": "indigo",
+            },
+            {
+                "id": "COMPLETED",
+                "title": "Completed",
+                "statuses": [TaskStatus.COMPLETED.value],
+                "color": "emerald",
+            },
+            {
+                "id": "ARCHIVED",
+                "title": "Failed / Cancelled",
+                "statuses": [
+                    TaskStatus.FAILED.value,
+                    TaskStatus.CANCELLED.value,
+                ],
+                "color": "zinc",
+            },
+        ]
+
+        # Calculate counts per column
+        status_counts: dict[str, int] = {}
+        for t in tasks:
+            status_counts[t.status] = status_counts.get(t.status, 0) + 1
+
+        columns = []
+        for col in column_configs:
+            count = sum(status_counts.get(s, 0) for s in col["statuses"])
+            columns.append(
+                {
+                    "id": col["id"],
+                    "title": col["title"],
+                    "statuses": col["statuses"],
+                    "color": col["color"],
+                    "task_count": count,
+                }
+            )
+
+        # 4. Rollup Statistics
+        total_tasks = len(tasks)
+        completed_tasks = status_counts.get(TaskStatus.COMPLETED.value, 0)
+        in_progress_tasks = status_counts.get(TaskStatus.ASSIGNED.value, 0) + status_counts.get(
+            TaskStatus.IN_PROGRESS.value, 0
+        )
+        waiting_tasks = status_counts.get(TaskStatus.WAITING.value, 0) + status_counts.get(
+            TaskStatus.APPROVAL_REQUIRED.value, 0
+        )
+        blocked_tasks = status_counts.get(TaskStatus.BLOCKED.value, 0)
+        completion_rate = (
+            round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0.0
+        )
+
+        summary = {
+            "total_tasks": total_tasks,
+            "completed_tasks": completed_tasks,
+            "in_progress_tasks": in_progress_tasks,
+            "waiting_tasks": waiting_tasks,
+            "blocked_tasks": blocked_tasks,
+            "completion_rate": completion_rate,
+        }
+
+        # 5. Allowed Transitions Map (TaskStateMachine)
+        allowed_transitions = {
+            status: sorted(targets)
+            for status, targets in TaskStateMachine.ALLOWED_TRANSITIONS.items()
+        }
+
+        return {
+            "project": project,
+            "columns": columns,
+            "tasks": tasks,
+            "allowed_transitions": allowed_transitions,
+            "summary": summary,
+        }

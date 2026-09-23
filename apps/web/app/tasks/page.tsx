@@ -28,6 +28,7 @@ import {
   ChevronRight,
   Cpu,
   FileCode,
+  LayoutGrid,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -428,6 +429,16 @@ export default function TasksPage() {
                   </option>
                 ))}
               </select>
+            )}
+            {projects.length > 0 && (
+              <Link
+                href={`/projects/${projectFilter !== "ALL" ? projectFilter : projects[0].id}/board`}
+                className="inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium rounded-lg border border-zinc-700 transition-colors shadow-sm"
+                title="Open interactive Kanban board for project"
+              >
+                <LayoutGrid className="h-4 w-4 text-emerald-400" />
+                <span>Kanban Board</span>
+              </Link>
             )}
             <button
               onClick={() => setShowCreateModal(true)}

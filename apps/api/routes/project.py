@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.services.project_service import ProjectService
 from apps.api.dependencies.auth import get_current_user
+from apps.api.routes.task import _to_task_response
 from apps.api.schemas.work import (
+    BoardSummaryStats,
+    KanbanColumn,
+    ProjectBoardResponse,
     ProjectCreateRequest,
     ProjectListResponse,
     ProjectResponse,
@@ -183,6 +187,37 @@ async def delete_project(
             user_id=current_user.id,
             company_id=company_id,
             project_id=project_id,
+        )
+    except WorkAccessDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.get(
+    "/{project_id}/board",
+    response_model=ProjectBoardResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_project_board(
+    company_id: str,
+    project_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[ProjectService, Depends(get_project_service)],
+) -> ProjectBoardResponse:
+    """Fetch Kanban board data for the specified project, including columns, tasks, transitions, and summary."""
+    try:
+        board_data = await service.get_project_board(
+            user_id=current_user.id,
+            company_id=company_id,
+            project_id=project_id,
+        )
+        return ProjectBoardResponse(
+            project=_to_project_response(board_data["project"]),
+            columns=[KanbanColumn(**c) for c in board_data["columns"]],
+            tasks=[_to_task_response(t) for t in board_data["tasks"]],
+            allowed_transitions=board_data["allowed_transitions"],
+            summary=BoardSummaryStats(**board_data["summary"]),
         )
     except WorkAccessDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e

@@ -1167,6 +1167,49 @@ describe("Web API Client", () => {
   });
 
 
+  it("getProjectBoard sends GET to project board endpoint and returns board data", async () => {
+    const mockBoard = {
+      project: { id: "proj-1", name: "Board Alpha", status: "ACTIVE" },
+      columns: [
+        { id: "READY", title: "Ready", statuses: ["READY"], color: "blue", task_count: 1 },
+        { id: "IN_PROGRESS", title: "In Progress", statuses: ["IN_PROGRESS"], color: "amber", task_count: 1 },
+      ],
+      tasks: [
+        { id: "task-1", title: "Task One", status: "READY", priority: "high" },
+        { id: "task-2", title: "Task Two", status: "IN_PROGRESS", priority: "critical" },
+      ],
+      allowed_transitions: {
+        READY: ["IN_PROGRESS", "BLOCKED"],
+        IN_PROGRESS: ["VERIFYING", "COMPLETED"],
+      },
+      summary: {
+        total_tasks: 2,
+        completed_tasks: 0,
+        in_progress_tasks: 1,
+        waiting_tasks: 0,
+        blocked_tasks: 0,
+        completion_rate: 0.0,
+      },
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockBoard,
+    } as Response);
+
+    const res = await api.getProjectBoard("comp-1", "proj-1");
+    expect(res.project.name).toBe("Board Alpha");
+    expect(res.columns).toHaveLength(2);
+    expect(res.tasks).toHaveLength(2);
+    expect(res.summary.total_tasks).toBe(2);
+    expect(res.allowed_transitions["READY"]).toContain("IN_PROGRESS");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/projects/proj-1/board",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

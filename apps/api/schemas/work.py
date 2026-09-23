@@ -180,3 +180,34 @@ class TaskListResponse(BaseModel):
 
     items: list[TaskResponse]
     total: int
+
+
+class KanbanColumn(BaseModel):
+    """Schema representing a Kanban board column."""
+
+    id: str = Field(..., description="Column identifier, e.g. READY, IN_PROGRESS")
+    title: str = Field(..., description="Display title for the column")
+    statuses: list[str] = Field(..., description="Task statuses included in this column")
+    color: str = Field(default="zinc", description="Color token for visual branding")
+    task_count: int = Field(default=0, description="Number of tasks currently in column")
+
+
+class BoardSummaryStats(BaseModel):
+    """Summary statistics for tasks on the project board."""
+
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    in_progress_tasks: int = 0
+    waiting_tasks: int = 0
+    blocked_tasks: int = 0
+    completion_rate: float = 0.0
+
+
+class ProjectBoardResponse(BaseModel):
+    """Authoritative response representing a project Kanban board."""
+
+    project: ProjectResponse
+    columns: list[KanbanColumn]
+    tasks: list[TaskResponse]
+    allowed_transitions: dict[str, list[str]]
+    summary: BoardSummaryStats
