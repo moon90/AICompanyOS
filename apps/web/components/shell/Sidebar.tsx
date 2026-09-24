@@ -18,6 +18,7 @@ import {
   Radio,
   Settings,
   ShieldAlert,
+  Sparkles,
   User as UserIcon,
   Users,
   Wrench,
@@ -89,6 +90,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           icon: BookOpen,
           phaseBadge: "Phase 19",
           isCurrent: pathname === "/knowledge",
+        },
+        {
+          name: "Vector Memory",
+          href: "/semantic",
+          icon: Sparkles,
+          phaseBadge: "Phase 20",
+          isCurrent: pathname === "/semantic",
         },
       ],
     },
@@ -254,14 +262,14 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
       {/* Phase Boundary Widget per UI.md § 21 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Advanced Knowledge</span>
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-indigo-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-            Phase 19 Active
+          <span className="text-slate-400 font-medium">Vector Memory</span>
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+            Phase 20 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Persistent research, strategies, decision rationales &amp; selective context retrieval active in <strong className="text-slate-300">Phase 19</strong>.
+          Dense 768-dim embeddings, pgvector HNSW indexing &amp; semantic context retrieval active in <strong className="text-slate-300">Phase 20</strong>.
         </p>
       </div>
 

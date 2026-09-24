@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -266,6 +267,11 @@ class Company(Base):
     )
     knowledge_items: Mapped[list["CompanyKnowledge"]] = relationship(
         "CompanyKnowledge",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    vector_embeddings: Mapped[list["VectorEmbedding"]] = relationship(
+        "VectorEmbedding",
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -2168,4 +2174,87 @@ Index(
 )
 Index(
     "ix_company_knowledge_company_created", CompanyKnowledge.company_id, CompanyKnowledge.created_at
+)
+
+
+class VectorEmbedding(Base):
+    """Authoritative semantic vector embedding record adhering to docs/Phases.md Section 24 and docs/Memory.md Section 40.
+
+    Stores normalized 768-dimensional dense embeddings for company knowledge chunks, decisions,
+    artifacts, and tasks. Enables sub-millisecond approximate nearest neighbor (ANN) retrieval
+    without altering authoritative structured state.
+    """
+
+    __tablename__ = "vector_embeddings"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+    )
+    source_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+        index=True,
+    )
+    chunk_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(768),
+        nullable=False,
+    )
+    embedding_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="vector_embeddings")
+
+
+Index(
+    "ix_vector_embeddings_company_source", VectorEmbedding.company_id, VectorEmbedding.source_type
+)
+Index(
+    "ix_vector_embeddings_company_source_id", VectorEmbedding.company_id, VectorEmbedding.source_id
+)
+Index(
+    "ix_vector_embeddings_company_created", VectorEmbedding.company_id, VectorEmbedding.created_at
+)
+Index(
+    "ix_vector_embeddings_hnsw",
+    VectorEmbedding.embedding,
+    postgresql_using="hnsw",
+    postgresql_ops={"embedding": "vector_cosine_ops"},
 )

@@ -1943,6 +1943,54 @@ export const api = {
       }
     );
   },
+
+  // Phase 20 — Semantic / Vector Memory
+  async searchSemanticMemory(
+    companyId: string,
+    payload: SemanticSearchRequest
+  ): Promise<SemanticSearchResponse> {
+    return request<SemanticSearchResponse>(
+      `/api/v1/companies/${companyId}/semantic/search`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async buildSemanticContext(
+    companyId: string,
+    payload: SemanticContextBuildRequest
+  ): Promise<SemanticContextBuildResponse> {
+    return request<SemanticContextBuildResponse>(
+      `/api/v1/companies/${companyId}/semantic/context`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async batchIndexMemory(
+    companyId: string,
+    payload: BatchIndexRequest = {}
+  ): Promise<BatchIndexResponse> {
+    return request<BatchIndexResponse>(
+      `/api/v1/companies/${companyId}/semantic/index`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async getVectorMemoryStats(
+    companyId: string
+  ): Promise<VectorMemoryStatsResponse> {
+    return request<VectorMemoryStatsResponse>(
+      `/api/v1/companies/${companyId}/semantic/stats`
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -2576,4 +2624,72 @@ export interface SelectiveContextResponse {
   timestamp: string;
 }
 
+// Phase 20 — Semantic / Vector Memory Interfaces
+export interface SemanticSearchRequest {
+  query: string;
+  limit?: number;
+  min_similarity?: number;
+  source_types?: string[];
+  project_id?: string | null;
+}
 
+export interface SemanticSearchResultItem {
+  id: string;
+  source_type: string;
+  source_id: string;
+  title: string;
+  content_chunk: string;
+  similarity_score: number;
+  distance: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface SemanticSearchResponse {
+  query: string;
+  results: SemanticSearchResultItem[];
+  total_matches: number;
+  execution_time_ms: number;
+  timestamp: string;
+}
+
+export interface SemanticContextBuildRequest {
+  query: string;
+  task_id?: string | null;
+  project_id?: string | null;
+  limit?: number;
+  min_similarity?: number;
+}
+
+export interface SemanticContextBuildResponse {
+  query: string;
+  company_id: string;
+  synthesized_context: string;
+  items_used: SemanticSearchResultItem[];
+  total_items: number;
+  timestamp: string;
+}
+
+export interface VectorMemoryStatsResponse {
+  company_id: string;
+  total_embeddings: number;
+  count_by_source: Record<string, number>;
+  dimension: number;
+  vector_engine: string;
+  index_type: string;
+  timestamp: string;
+}
+
+export interface BatchIndexRequest {
+  source_types?: string[];
+  force_reindex?: boolean;
+}
+
+export interface BatchIndexResponse {
+  company_id: string;
+  indexed_count: number;
+  updated_count: number;
+  skipped_count: number;
+  total_chunks: number;
+  duration_ms: number;
+  timestamp: string;
+}

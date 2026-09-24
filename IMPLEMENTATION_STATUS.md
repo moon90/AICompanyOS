@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 19 — Advanced Company Knowledge** (COMPLETE)
+**Phase 20 — Semantic / Vector Memory** (COMPLETE)
 
 ---
 
@@ -923,40 +923,82 @@
     - Slide-out Detailed Inspection Drawer with content reader, metadata viewer, and edit/delete actions.
     - Create / Edit Knowledge modal supporting all canonical fields.
 
+### Phase 20 — Semantic / Vector Memory (COMPLETE)
+* **Objective & Scope (`docs/Phases.md` § 24, `docs/Memory.md` § 40):**
+  - Added intelligent dense vector retrieval inside PostgreSQL using `pgvector` across company knowledge chunks, decisions, artifacts, and tasks.
+  - Enforced foundational architectural principle: *"Vector memory is a retrieval mechanism. It is NOT the authoritative source of company state."* (PostgreSQL = structured truth; Redis = temporary operational state; pgvector = semantic retrieval).
+* **Infrastructure & Database Persistence:**
+  - Configured PostgreSQL container with `postgresql-16-pgvector` and activated extension `CREATE EXTENSION IF NOT EXISTS vector;`.
+  - Added `pgvector>=0.3.0` dependency to Python environment (`pyproject.toml`).
+  - Created `VectorEmbedding` model in `infrastructure/database/models.py` with 768-dimensional `Vector(768)` column, metadata mapping, and PostgreSQL HNSW index `ix_vector_embeddings_hnsw` (`USING hnsw (embedding vector_cosine_ops)`).
+  - Authored and applied Alembic migration `0018_create_vector_embeddings.py` with verified zero schema drift (`alembic check`).
+* **Dense Embedding Engine:**
+  - Implemented `EmbeddingEngine`, `default_embedding_engine`, `EMBEDDING_DIMENSION = 768`, and `cosine_similarity(...)` in `infrastructure/embeddings/engine.py`.
+  - Generates normalized dense float vectors with sub-word n-gram hashing and positional weighting for 100% reproducible, high-throughput retrieval without external network dependencies.
+* **Domain Layer (`domain/semantic/`):**
+  - Exceptions: `SemanticMemoryError`, `SemanticMemoryNotFoundError`, `SemanticAccessDeniedError`, `EmbeddingDimensionMismatchError`, `InvalidSemanticOperationError`.
+  - Pydantic Schemas: `SemanticSearchRequest`, `SemanticSearchResultItem`, `SemanticSearchResponse`, `SemanticContextBuildRequest`, `SemanticContextBuildResponse`, `VectorMemoryStatsResponse`, `BatchIndexRequest`, `BatchIndexResponse`, `VectorEmbeddingResponse`.
+* **Application Services (`application/services/semantic_service.py`):**
+  - Implemented `SemanticService`:
+    - `index_entity`: Single entity chunking and vector storage with upsert idempotency.
+    - `index_company_knowledge`: High-performance batch indexer across Knowledge records, Decisions, Artifacts, and Tasks.
+    - `search_semantic`: Dual-mode retrieval executing native PostgreSQL pgvector `<=>` cosine distance scans with HNSW index in production, and Python cosine similarity on candidate sets in SQLite test suites.
+    - `build_semantic_context`: Synthesizes bounded, relevant markdown context for AI agents adhering to the retrieval pipeline (`Task -> Query -> Semantic Search -> Relevant Knowledge -> Context Builder -> Agent`).
+    - `get_vector_stats`: Provides embedding counts, source distributions, dimension metrics, and index health.
+  - Updated `SystemService`: `CURRENT_PHASE = "Phase 20 — Semantic / Vector Memory"`.
+* **API Layer (`apps/api/`):**
+  - Created `apps/api/schemas/semantic.py` re-exporting domain schemas.
+  - Implemented `apps/api/routes/semantic.py` mounted at `/api/v1/companies/{company_id}/semantic`:
+    - `POST /search`: Vector similarity retrieval with relevance scores and filters.
+    - `POST /context`: Agent bounded context synthesizer.
+    - `POST /index`: Batch indexing & re-indexing trigger.
+    - `GET /stats`: Vector memory telemetry and source distribution.
+  - Registered `semantic_router` in `apps/api/main.py`.
+* **Frontend Layer (`apps/web/`):**
+  - `apps/web/lib/api.ts`: Added Semantic Memory types and client methods (`searchSemanticMemory`, `buildSemanticContext`, `batchIndexMemory`, `getVectorMemoryStats`).
+  - `apps/web/lib/api.test.ts`: Added unit tests for Phase 20 methods (54/54 Vitest tests passing).
+  - `apps/web/components/shell/Sidebar.tsx`: Added `/semantic` navigation item with `Sparkles` icon and `Phase 20` badge; updated Phase Boundary Widget to `Phase 20 Active: Vector Memory`.
+  - `apps/web/app/semantic/page.tsx`:
+    - Executive Telemetry strip: Total Embeddings, Dimension (768), Index Topology (HNSW), and Source Distribution tags.
+    - Interactive "Sync & Re-Index State" trigger button with live duration and count telemetry.
+    - Tab 1 (Semantic Search Explorer): Natural language search input, quick inquiry chips, source filter chips, similarity threshold slider, candidate limit, and ranked cards with percentage similarity gauges and distances.
+    - Tab 2 (Agent Context Builder): Interactive simulator for synthesizing bounded task prompts for AI agents with markdown preview and copy controls.
+    - Tab 3 (pgvector Architecture & Governance): Visualizing structured truth (PostgreSQL) vs semantic retrieval (pgvector) vs operational cache (Redis).
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (214 passed in 25.91s) |
-| **Knowledge Service & API Tests** | `pytest tests/unit/test_knowledge_service.py tests/integration/test_api_knowledge.py` | **PASSED** (8 tests in 1.37s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 240 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (240 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (232 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (53 tests in 2 files in 294ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (224 passed in 26.78s) |
+| **Semantic Service & API Tests** | `pytest tests/unit/test_semantic_service.py tests/integration/test_api_semantic.py` | **PASSED** (10 tests in 2.52s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 251 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (251 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (243 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (54 tests in 2 files in 280ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
-| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (18 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0017` applied on PostgreSQL) |
+| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (19 routes compiled, static generation verified) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0018` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
-| **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all queries) |
+| **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all vector operations) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **Selective Context Retrieval (`docs/Phases.md` § 23):**
-   Agents never load the entire company database into context. `KnowledgeService.get_selective_context` dynamically retrieves bounded subsets (top relevant decisions, knowledge records, recent artifacts, execution precedents) tailored to intent keywords and project scope.
-2. **Canonical Question Grounding:**
-   The knowledge inquiry engine explicitly resolves the 5 Section 23 questions, outputting typed `citations` linking directly to authoritative `DECISION`, `KNOWLEDGE`, `ARTIFACT`, or `EXECUTION` source entities.
-3. **Database Metadata Column Collision Resolution:**
-   Mapped the database column `"metadata"` to Python attribute `knowledge_metadata` on the ORM model while using Pydantic `AliasChoices("metadata", "knowledge_metadata")` for bidirectional API compatibility with zero schema drift.
+1. **Vector Memory as Retrieval Mechanism (`docs/Memory.md` § 40):**
+   Vector embeddings are strictly a retrieval indexing layer and never authoritative state. If a record is mutated or removed in PostgreSQL, its embedding is synchronized or deleted.
+2. **PostgreSQL pgvector HNSW Indexing:**
+   Utilized `Vector(768)` with an HNSW cosine index (`ix_vector_embeddings_hnsw` USING hnsw with `vector_cosine_ops`) for sub-millisecond retrieval latency without running separate vector database containers.
+3. **Dual-Mode Vector Search:**
+   `SemanticService.search_semantic` dynamically detects the database dialect: running native SQL `<=>` operator on PostgreSQL with HNSW acceleration, and falling back to candidate projection with Python cosine similarity on in-memory SQLite test suites.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 20 — Semantic / Vector Memory**
+**Phase 21 — External Integrations & Connectors**
 *(Awaiting user authorization before proceeding).*
 
 

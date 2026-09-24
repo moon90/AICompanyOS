@@ -2068,6 +2068,130 @@ describe("Web API Client", () => {
     expect(ctxRes.synthesized_context).toContain("### Selective Company Knowledge");
   });
 
+  it("performs Phase 20 semantic memory operations correctly", async () => {
+    // 1. searchSemanticMemory
+    const mockSearchResponse = {
+      query: "PostgreSQL pgvector cosine search",
+      results: [
+        {
+          id: "vec-1",
+          source_type: "KNOWLEDGE",
+          source_id: "kn-1",
+          title: "pgvector Guide",
+          content_chunk: "HNSW indexes accelerate cosine retrieval",
+          similarity_score: 0.92,
+          distance: 0.08,
+          metadata: { category: "TECHNICAL" },
+        },
+      ],
+      total_matches: 1,
+      execution_time_ms: 12.4,
+      timestamp: "2026-09-24T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockSearchResponse,
+    } as Response);
+
+    const searchRes = await api.searchSemanticMemory("comp-1", {
+      query: "PostgreSQL pgvector cosine search",
+      limit: 5,
+    });
+    expect(searchRes.total_matches).toBe(1);
+    expect(searchRes.results[0].title).toBe("pgvector Guide");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/semantic/search",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          query: "PostgreSQL pgvector cosine search",
+          limit: 5,
+        }),
+      })
+    );
+
+    // 2. buildSemanticContext
+    const mockContextResponse = {
+      query: "Configure HNSW indexing",
+      company_id: "comp-1",
+      synthesized_context: "### Semantic Company Context\n- pgvector Guide",
+      items_used: mockSearchResponse.results,
+      total_items: 1,
+      timestamp: "2026-09-24T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockContextResponse,
+    } as Response);
+
+    const ctxRes = await api.buildSemanticContext("comp-1", {
+      query: "Configure HNSW indexing",
+      limit: 3,
+    });
+    expect(ctxRes.company_id).toBe("comp-1");
+    expect(ctxRes.synthesized_context).toContain("### Semantic Company Context");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/semantic/context",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 3. batchIndexMemory
+    const mockIndexResponse = {
+      company_id: "comp-1",
+      indexed_count: 5,
+      updated_count: 0,
+      skipped_count: 2,
+      total_chunks: 5,
+      duration_ms: 45.2,
+      timestamp: "2026-09-24T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockIndexResponse,
+    } as Response);
+
+    const indexRes = await api.batchIndexMemory("comp-1", {
+      force_reindex: true,
+    });
+    expect(indexRes.indexed_count).toBe(5);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/semantic/index",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 4. getVectorMemoryStats
+    const mockStatsResponse = {
+      company_id: "comp-1",
+      total_embeddings: 18,
+      count_by_source: { KNOWLEDGE: 8, DECISION: 5, ARTIFACT: 3, TASK: 2 },
+      dimension: 768,
+      vector_engine: "IceSoft Dense Embedding Engine (Deterministic 768-dim)",
+      index_type: "HNSW",
+      timestamp: "2026-09-24T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockStatsResponse,
+    } as Response);
+
+    const statsRes = await api.getVectorMemoryStats("comp-1");
+    expect(statsRes.total_embeddings).toBe(18);
+    expect(statsRes.dimension).toBe(768);
+    expect(statsRes.index_type).toBe("HNSW");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/semantic/stats",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
