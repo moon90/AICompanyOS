@@ -20,6 +20,7 @@ from apps.api.routes.health import router as health_router
 from apps.api.routes.memory import router as memory_router
 from apps.api.routes.presence import router as presence_router
 from apps.api.routes.project import router as project_router
+from apps.api.routes.realtime import router as realtime_router
 from apps.api.routes.system import router as system_router
 from apps.api.routes.task import router as task_router
 from apps.api.routes.tool import router as tool_router
@@ -78,6 +79,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(presence_router)
     application.include_router(errors_router)
     application.include_router(engineering_router)
+    application.include_router(realtime_router)
 
     return application
 

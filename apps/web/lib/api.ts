@@ -1662,6 +1662,88 @@ export const api = {
       `/api/v1/companies/${companyId}/engineering/files${qs}`
     );
   },
+
+  subscribeCompanyEvents(
+    companyId: string,
+    onEvent: (event: LiveEventPayload) => void,
+    onError?: (error: Event) => void
+  ): () => void {
+    if (typeof EventSource === "undefined") {
+      return () => {};
+    }
+
+    const url = `${API_BASE_URL}/api/v1/companies/${companyId}/realtime/events`;
+    const eventSource = new EventSource(url, { withCredentials: true });
+
+    eventSource.onmessage = (e) => {
+      try {
+        const payload: LiveEventPayload = JSON.parse(e.data);
+        onEvent(payload);
+      } catch (err) {
+        console.error("Failed to parse SSE event data:", err);
+      }
+    };
+
+    const eventTypes = [
+      "system.connected",
+      "ceo.planning",
+      "agent.started",
+      "task.assigned",
+      "agent.working",
+      "tool.called",
+      "tool.completed",
+      "task.blocked",
+      "approval.requested",
+      "approval.approved",
+      "approval.rejected",
+      "error.detected",
+      "error.resolved",
+      "task.completed",
+      "task.status_changed",
+      "presence.updated",
+      "engineering.verified",
+      "engineering.updated",
+      "test.pulse",
+    ];
+
+    for (const type of eventTypes) {
+      eventSource.addEventListener(type, (e: MessageEvent) => {
+        try {
+          const payload: LiveEventPayload = JSON.parse(e.data);
+          onEvent(payload);
+        } catch (err) {
+          console.error(`Failed to parse SSE event (${type}):`, err);
+        }
+      });
+    }
+
+    if (onError) {
+      eventSource.onerror = onError;
+    }
+
+    return () => {
+      eventSource.close();
+    };
+  },
+
+  async emitRealtimeEvent(
+    companyId: string,
+    payload: RealtimeEmitPayload
+  ): Promise<LiveEventPayload> {
+    return request<LiveEventPayload>(
+      `/api/v1/companies/${companyId}/realtime/emit`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async getRealtimeStatus(companyId: string): Promise<RealtimeStatusResponse> {
+    return request<RealtimeStatusResponse>(
+      `/api/v1/companies/${companyId}/realtime/status`
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -2041,6 +2123,57 @@ export interface FileChangeCreatePayload {
   change_summary?: string | null;
 }
 
+export type RealtimeEventType =
+  | "ceo.planning"
+  | "agent.started"
+  | "task.assigned"
+  | "agent.working"
+  | "tool.called"
+  | "tool.completed"
+  | "task.blocked"
+  | "approval.requested"
+  | "approval.approved"
+  | "approval.rejected"
+  | "error.detected"
+  | "error.resolved"
+  | "task.completed"
+  | "task.status_changed"
+  | "presence.updated"
+  | "engineering.verified"
+  | "engineering.updated"
+  | "system.connected"
+  | "system.heartbeat"
+  | "test.pulse";
 
+export interface LiveEventPayload {
+  id: string;
+  company_id: string;
+  event_type: RealtimeEventType | string;
+  message: string;
+  actor_type: string;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  project_id?: string | null;
+  task_id?: string | null;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+}
 
+export interface RealtimeStatusResponse {
+  company_id: string;
+  active_subscribers: number;
+  channel_status: "active" | "idle";
+  events_dispatched: number;
+  timestamp: string;
+}
 
+export interface RealtimeEmitPayload {
+  event_type: string;
+  message: string;
+  actor_type?: string;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  project_id?: string | null;
+  task_id?: string | null;
+  metadata?: Record<string, unknown>;
+}

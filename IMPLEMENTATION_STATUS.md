@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 16 — Engineering File Tracking** (COMPLETE)
+**Phase 17 — Real-Time Operations** (COMPLETE)
 
 ---
 
@@ -789,18 +789,53 @@
     - Added "Log Code File Change" modal to record manual/agent changes.
     - Added "Configure Git & Verification Context" modal for setting branch, PR, test outcomes, and reviewer notes.
 
+### Phase 17 — Real-Time Operations (COMPLETE)
+* **Real-Time Architecture & Event Dispatcher (`infrastructure/events/dispatcher.py`):**
+  - Implemented singleton `EventDispatcher` coordinating multi-tenant asynchronous subscriber queues (`asyncio.Queue`).
+  - Thread-safe and async-safe subscription lifecycle management per `company_id`.
+  - Backpressure handling: Queue overflow automatically drops oldest items (`QueueEmpty` suppressed) to prevent memory leaks and blocking.
+  - Automatic cleanup on connection termination.
+* **Domain Layer (`domain/realtime/`):**
+  - Defined `RealtimeEventType` enum mapping the required operational event taxonomy: `ceo.planning`, `agent.started`, `task.assigned`, `agent.working`, `tool.called`, `tool.completed`, `task.blocked`, `approval.requested`, `approval.approved`, `approval.rejected`, `error.detected`, `error.resolved`, `task.completed`, `task.status_changed`, `presence.updated`, `engineering.verified`, `engineering.updated`, `system.heartbeat`, `test.pulse`.
+  - Created `RealtimeEventPayload`, `RealtimeEmitRequest`, and `RealtimeStatusResponse` schemas.
+  - Domain exceptions in `domain/realtime/exceptions.py`: `RealtimeError`, `RealtimeAccessDeniedError`, `InvalidRealtimeEventError`.
+* **Application Services (`application/services/`):**
+  - `RealtimeService`: Coordinates company access verification, live event broadcasting, channel telemetry, and async SSE generators.
+  - `ActivityService.record_event`: Integrated with `EventDispatcher` so every authoritative database-committed activity event is automatically broadcast in real time across the SSE stream.
+  - `SystemService`: `CURRENT_PHASE = "Phase 17 — Real-Time Operations"`.
+* **API Layer (`apps/api/routes/realtime.py`):**
+  - Mounted `/api/v1/companies/{company_id}/realtime` endpoints:
+    - `GET /events`: Server-Sent Events (SSE) streaming endpoint using `StreamingResponse(media_type="text/event-stream")` with keep-alive comments (`: ping\n\n` every 15s) and automatic unsubscription upon client disconnect.
+    - `POST /emit`: Operator endpoint to broadcast test pulses or operational triggers.
+    - `GET /status`: Channel status and active subscriber metrics.
+  - Registered `realtime_router` in `apps/api/main.py`.
+* **Frontend Real-Time Operations (`apps/web/`):**
+  - `apps/web/lib/api.ts`: Added `LiveEventPayload`, `RealtimeStatusResponse`, `RealtimeEmitPayload` types and client methods `subscribeCompanyEvents`, `emitRealtimeEvent`, `getRealtimeStatus`.
+  - `apps/web/lib/api.test.ts`: Added unit tests for all 3 real-time methods (48/48 Vitest tests passed).
+  - `apps/web/components/shell/Sidebar.tsx`: Updated Phase Boundary Widget to `Phase 17 Active: Real-Time Operations`.
+  - `apps/web/app/page.tsx` (Executive Dashboard):
+    - Subscribed to real-time events via `api.subscribeCompanyEvents`.
+    - Live Connection Badge in header: `● LIVE (SSE)` with pulsing emerald beacon, reconnecting state, and offline indicators.
+    - Added "Send Test Pulse" operator button with instant visual broadcast.
+    - **Real-Time Operations Feed Panel**:
+      - Live scrolling stream of incoming events with category filter ("All", "Agent", "Task", "Approval", "Error", "CEO").
+      - Event-specific visual icons and badges matching the Phase 17 taxonomy.
+      - "Pause" / "Resume" live feed toggle.
+      - Expandable JSON metadata inspector.
+    - **Reactive Telemetry Auto-Refresh**: Background silently updates task counters, blocked tasks, pending approvals, agent presence, and error summaries upon receiving relevant events without full-page reloads, satisfying acceptance criteria: *"Users see meaningful execution updates without manually refreshing the page."*
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (187 passed in 22.34s) |
-| **Engineering Tracking Tests** | `pytest tests/unit/test_engineering_service.py tests/integration/test_api_engineering.py` | **PASSED** (8 tests in 2.21s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 212 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (212 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (204 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (45 tests in 2 files in 253ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (195 passed in 22.80s) |
+| **Realtime Dispatcher Tests** | `pytest tests/unit/test_realtime_dispatcher.py tests/integration/test_api_realtime.py` | **PASSED** (8 tests in 1.45s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 222 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (222 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (214 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (48 tests in 2 files in 272ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (16 routes compiled, static generation verified) |
 | **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0015` applied on PostgreSQL) |
@@ -811,20 +846,20 @@
 
 ## Important Architectural Decisions
 
-1. **Git is the Source of Truth (`docs/Memory.md` § 61, `docs/Phases.md` § 20):**
-   Our platform never duplicates Git object stores or attempts to replace Git. We track operational metadata connecting `Task → Agent → File → Branch → Commit → PR → Verification`.
-2. **Deterministic Multi-Tenant Scoping:**
-   Both `TaskEngineeringContext` and `TaskFileChange` enforce explicit `company_id` foreign keys and verification to prevent cross-company leakage.
-3. **Automated Verification Transitions:**
-   Setting `verification_state = "VERIFIED"` or `"REJECTED"` captures the deciding operator's identity (`verified_by_user_id` / `verified_by_agent_id`) and timestamp (`verified_at`), logging auditable system events.
-4. **Resilient Session Flush Lifecycles:**
-   Application services immediately re-fetch database records following `ActivityService.record_event` to prevent async SQLite expired attribute errors (`MissingGreenlet`).
+1. **Database Remains Authoritative (`docs/Memory.md` § 47):**
+   The real-time layer distributes changes; it does not replace or compete with PostgreSQL transactions. If SSE fails or reconnects, company state is safe and reloads gracefully.
+2. **Backpressure & Bounded Memory:**
+   `EventDispatcher` enforces `maxsize` on subscriber queues, dropping the oldest events for lagging clients to ensure memory stability.
+3. **Decoupled Real-Time Failure Isolation:**
+   Failures in real-time event dispatching never compromise or rollback authoritative database transactions in `ActivityService`.
+4. **SSE vs WebSockets for Operational Broadcast:**
+   Server-Sent Events (SSE) was selected for unidirectional telemetry streaming, providing native HTTP/2 multiplexing, automatic browser reconnection, and simplicity without WebSocket framing overhead.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 17 — Verification Guardrails**
+**Phase 18 — Documents & Artifacts**
 *(Awaiting user authorization before proceeding).*
 
 

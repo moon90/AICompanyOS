@@ -57,6 +57,26 @@ class ActivityService:
         )
         session.add(event)
         await session.flush()
+
+        # Broadcast over real-time operations event stream (Phase 17)
+        try:
+            from infrastructure.events.dispatcher import EventDispatcher
+
+            dispatcher = EventDispatcher.get_instance()
+            await dispatcher.broadcast_event(
+                company_id=company_id,
+                event_type=event_type,
+                message=message,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                project_id=project_id,
+                task_id=task_id,
+                metadata=metadata or {},
+            )
+        except Exception:
+            # Real-time failure must never compromise authoritative database transaction
+            pass
+
         return event
 
     async def get_company_activity(

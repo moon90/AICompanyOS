@@ -1665,6 +1665,91 @@ describe("Web API Client", () => {
     );
   });
 
+  it("emitRealtimeEvent sends operational event payload", async () => {
+    const mockEvent = {
+      id: "ev-101",
+      company_id: "comp-1",
+      event_type: "agent.started",
+      message: "Agent started execution",
+      actor_type: "agent",
+      timestamp: "2026-09-24T20:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockEvent,
+    } as Response);
+
+    const res = await api.emitRealtimeEvent("comp-1", {
+      event_type: "agent.started",
+      message: "Agent started execution",
+      actor_type: "agent",
+    });
+
+    expect(res.id).toBe("ev-101");
+    expect(res.event_type).toBe("agent.started");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/realtime/emit",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("getRealtimeStatus returns active listener metrics", async () => {
+    const mockStatus = {
+      company_id: "comp-1",
+      active_subscribers: 3,
+      channel_status: "active",
+      events_dispatched: 42,
+      timestamp: "2026-09-24T20:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockStatus,
+    } as Response);
+
+    const res = await api.getRealtimeStatus("comp-1");
+    expect(res.active_subscribers).toBe(3);
+    expect(res.channel_status).toBe("active");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/realtime/status",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("subscribeCompanyEvents establishes SSE and returns cleanup unsubscribe function", () => {
+    // Mock global EventSource
+    const mockClose = vi.fn();
+    const mockAddEventListener = vi.fn();
+
+    class MockEventSource {
+      url: string;
+      onmessage: ((e: MessageEvent) => void) | null = null;
+      onerror: ((e: Event) => void) | null = null;
+      close = mockClose;
+      addEventListener = mockAddEventListener;
+      constructor(url: string) {
+        this.url = url;
+      }
+    }
+
+    const originalEventSource = globalThis.EventSource;
+    (globalThis as unknown as { EventSource: unknown }).EventSource = MockEventSource;
+
+    try {
+      const onEvent = vi.fn();
+      const unsubscribe = api.subscribeCompanyEvents("comp-1", onEvent);
+
+      expect(typeof unsubscribe).toBe("function");
+      unsubscribe();
+      expect(mockClose).toHaveBeenCalledTimes(1);
+    } finally {
+      (globalThis as unknown as { EventSource: unknown }).EventSource = originalEventSource;
+    }
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
