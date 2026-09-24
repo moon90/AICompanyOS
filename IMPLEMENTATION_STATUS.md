@@ -682,21 +682,91 @@
   * **Production Build:**
     - `npm run build` compiled all 15 routes cleanly with zero TypeScript or ESLint errors.
 
+### Phase 15 — Error & Bug Management (COMPLETE)
+
+* **Database Migration & Models:**
+  * Created Alembic migration `database/migrations/versions/0014_create_errors.py` (Revision ID: `0014_create_errors`, down revision: `0013_create_agent_presence`).
+  * Table `errors` created with PostgreSQL multi-tenant constraints and compound indexes:
+    - Primary key: `id` (UUID string).
+    - Foreign keys: `company_id` (CASCADE), `project_id` (SET NULL), `task_id` (SET NULL), `assigned_agent_id` (SET NULL), `assigned_user_id` (SET NULL).
+    - Lifecycle tracking: `detected_by`, `assigned_to`, `investigated_by`, `resolved_by`, `verified_by`.
+    - Analysis & proof: `root_cause` (TEXT), `resolution` (TEXT), `evidence` (JSON).
+    - Timestamps: `created_at`, `resolved_at`, `verified_at`.
+    - Compound indexes: `ix_errors_company_status`, `ix_errors_company_severity`, `ix_errors_company_created`.
+  * Updated ORM models in `infrastructure/database/models.py` with `ErrorRecord` and bidirectional relationships (`Company.errors`, `Project.errors`, `Task.errors`, `Agent.assigned_errors`, `User.assigned_errors`).
+  * Upgraded live PostgreSQL container database to revision `0014_create_errors (head)`. Verified zero schema drift with `alembic check`.
+* **Domain Layer (`domain/errors/`):**
+  * Implemented `ErrorSeverity` enum: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.
+  * Implemented `ErrorStatus` state machine: `OPEN`, `TRIAGED`, `ASSIGNED`, `INVESTIGATING`, `BLOCKED`, `RESOLVED`, `VERIFYING`, `VERIFIED`, `REOPENED`, `CLOSED`.
+  * Defined domain schemas: `ErrorCreatePayload`, `ErrorUpdatePayload`, `ErrorAssignPayload`, `ErrorResolvePayload`, `ErrorVerifyPayload`, `ErrorRecordResponse`, `ErrorListResponse`, `ErrorSummaryResponse`.
+  * Defined domain exceptions: `ErrorRecordError`, `ErrorNotFoundError`, `ErrorAccessDeniedError`, `InvalidErrorTransitionError`, `MissingResolutionError`, `MissingEvidenceError`.
+* **Application Services:**
+  * Implemented `ErrorService` in `application/services/error_service.py` answering all 8 operational error questions:
+    - `create_error`: records new error with tenant validation and logs `error.detected` activity event.
+    - `get_errors`: paginated error filtering by status, severity, project, task, assignee with status counts.
+    - `get_error`: single error retrieval with eager-loaded project, task, agent, user relations.
+    - `update_error`: field updates with evidence merging.
+    - `assign_error`: assigns to agent/user and transitions status from `OPEN`/`TRIAGED` to `ASSIGNED`.
+    - `start_investigation`: records active investigator and transitions to `INVESTIGATING`.
+    - `resolve_error`: enforces non-empty resolution description, records root cause and resolution timestamp.
+    - `verify_error`: enforces concrete proof/evidence (test outputs, commit hashes, logs), records verifier and verification timestamp.
+    - `reopen_error`: resets resolved/verified timestamps and transitions back to `REOPENED` with reason.
+    - `close_error`: marks error formally `CLOSED`.
+    - `get_error_summary`: aggregated metrics across all statuses and severities.
+  * **Execution Failure Integration:**
+    - Hooked into `ExecutionService.execute_task`: task execution failure automatically records an authoritative `ErrorRecord` with high severity, agent attribution, and execution evidence telemetry.
+  * **Activity History Integration:**
+    - Error actions automatically generate human-readable operational activity events (`error.detected`, `error.assigned`, `error.investigating`, `error.resolved`, `error.verified`, `error.reopened`, `error.closed`).
+  * `SystemService`: Updated `CURRENT_PHASE = "Phase 15 — Error & Bug Management"`.
+* **API Layer (`apps/api/`):**
+  * Created Pydantic schemas in `apps/api/schemas/error.py`.
+  * Created FastAPI router in `apps/api/routes/errors.py` mounted at `/api/v1/companies/{company_id}/errors`:
+    - `POST /errors`: create error record (201 Created).
+    - `GET /errors`: list and filter errors with operational counts.
+    - `GET /errors/summary`: lightweight aggregated error metrics for dashboards.
+    - `GET /errors/{error_id}`: single error details.
+    - `PATCH /errors/{error_id}`: update fields.
+    - `POST /errors/{error_id}/assign`: assign to agent or user.
+    - `POST /errors/{error_id}/investigate`: start active investigation.
+    - `POST /errors/{error_id}/resolve`: resolve with root cause and resolution.
+    - `POST /errors/{error_id}/verify`: verify with proof evidence.
+    - `POST /errors/{error_id}/reopen`: reopen with reason.
+    - `POST /errors/{error_id}/close`: formal closure.
+* **Frontend Error & Bug Management Console (`apps/web/`):**
+  * **API Client & Tests (`apps/web/lib/api.ts`, `apps/web/lib/api.test.ts`):**
+    - Added `ErrorSeverity`, `ErrorStatus`, `ErrorRecord`, `ErrorListResponse`, `ErrorSummary`, `ErrorCreatePayload`, `ErrorUpdatePayload`, `ErrorAssignPayload`, `ErrorResolvePayload`, `ErrorVerifyPayload` TypeScript interfaces.
+    - Added client methods: `getCompanyErrors`, `getCompanyErrorSummary`, `getError`, `createError`, `updateError`, `assignError`, `startErrorInvestigation`, `resolveError`, `verifyError`, `reopenError`, `closeError`.
+    - Added Vitest unit tests for all error methods; 41/41 tests passing.
+  * **Error & Bug Console (`apps/web/app/errors/page.tsx`):**
+    - Telemetry header with KPI metric cards: Total Errors, Open & Triaged, Investigating, Resolved, Verified / Closed, Critical Alerts.
+    - Filter & Tab bar: Status tabs ("All Items", "Open & Triaged", "Investigating", "Resolved", "Verified & Closed"), severity dropdown, and instant live search.
+    - Operational Error List Cards: Displays severity, status badges, linked project & task tags, description preview, and the 8 Authoritative Questions quick-strip.
+    - Operational Action Buttons: Instant inline actions for Assign, Investigate, Resolve, Verify Proof, Reopen, and Close.
+    - Comprehensive **8-Question Investigation Drawer**: Answers the 8 questions (What went wrong, Who detected it, Who is investigating, Who is working on it, Who resolved it, Who verified it, What was the root cause, What evidence proves resolution) with interactive JSON proof viewer.
+    - Interactive Modals: Report Bug modal, Assign modal with agent picker, Resolve modal with root cause analysis, Verify modal with evidence validator, and Reopen modal with reason tracking.
+  * **Executive Dashboard (`apps/web/app/page.tsx`):**
+    - Added "Errors & Bugs" KPI card displaying active bug count and critical alert count.
+  * **Sidebar Navigation (`apps/web/components/shell/Sidebar.tsx`):**
+    - Added "Errors & Bugs" nav item with `Phase 15` badge.
+    - Updated Phase Boundary Widget to `Phase 15 Active: Error & Bug Tracking`.
+  * **Production Build:**
+    - `npm run build` compiled all 16 routes cleanly with zero TypeScript or ESLint errors.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (165 passed in 18.46s) |
-| **Presence Tests** | `pytest tests/unit/test_presence_service.py tests/integration/test_api_presence.py` | **PASSED** (9 tests in 1.45s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 194 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (194 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (186 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (39 tests in 2 files in 245ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (179 passed in 20.14s) |
+| **Error Management Tests** | `pytest tests/unit/test_error_service.py tests/integration/test_api_errors.py` | **PASSED** (14 tests in 2.33s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 203 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (203 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (195 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (41 tests in 2 files in 340ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
-| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (15 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0013` applied on PostgreSQL) |
+| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (16 routes compiled, static generation verified) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0014` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
 | **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all queries) |
 
@@ -704,19 +774,20 @@
 
 ## Important Architectural Decisions
 
-1. **Presence is Operational State, Not Permanent History (`docs/Memory.md` § 20):**
-   Agent Presence answers the real-time operational question: *"Who is working right now?"* Presence is dynamic and mutable, backed by heartbeats and execution state, unlike immutable Activity History.
-2. **Stale-Aware Telemetry:**
-   If an agent stops reporting or its heartbeat expires (> 60s threshold), the system never assumes the agent is still working; it dynamically resets to `IDLE` (or `OFFLINE`).
-3. **Operational Language Only (`docs/UI.md` § 76):**
-   The UI strictly avoids anthropomorphic jargon, utilizing operational language: *Planning*, *Executing*, *Waiting*, *Blocked*, *Failed*.
-4. **Active Agents Dashboard Counter Activated:**
-   The Executive Dashboard "Active Agents" metric card transitions from a static placeholder to an authoritative live counter of agents with `WORKING` status.
+1. **Structured Error Log vs Raw Stack Traces (`docs/UI.md` § 45, `docs/Phases.md` § 19):**
+   Raw exceptions are captured in structured telemetry and sanitized for operational displays, answering the 8 operational questions rather than dumping unhandled stack traces.
+2. **Mandatory Evidence for Verification (`docs/Phases.md` § 19):**
+   Marking an error `VERIFIED` strictly enforces attached proof/evidence (test outputs, commit hashes, execution receipts).
+3. **Execution Failure Auto-Logging:**
+   When specialist agents or tasks fail in `ExecutionService`, an authoritative `ErrorRecord` is immediately registered with `HIGH` severity and linked to the task, project, and executing agent.
+4. **Tenant-Safe Lifecycle Operations:**
+   Every error read, assignment, transition, resolution, and verification requires membership verification against `company_id`.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 15 — Error & Bug Management**
+**Phase 16 — Verification Guardrails**
 *(Awaiting user authorization before proceeding).*
+
 

@@ -1,5 +1,6 @@
 """Application service for agent task execution adhering to docs/Phases.md Section 12."""
 
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,6 +29,7 @@ from infrastructure.database.models import (
     Agent,
     Company,
     CompanyMember,
+    ErrorRecord,
     ExecutionRecord,
     Task,
     TaskDependency,
@@ -250,6 +252,27 @@ class ExecutionService:
             )
             execution_record.error_details = str(exc)
             execution_record.completed_at = datetime.now(UTC)
+
+            # Record authoritative ErrorRecord for Bug & Error Management adhering to Phase 15
+            error_rec = ErrorRecord(
+                id=str(uuid.uuid4()),
+                company_id=company_id,
+                project_id=task.project_id,
+                task_id=task.id,
+                title=f"Task execution failed: {task.title}",
+                description=str(exc),
+                severity="HIGH",
+                status="OPEN",
+                detected_by=f"agent:{agent.name}",
+                assigned_to=f"agent:{agent.name}",
+                assigned_agent_id=agent.id,
+                evidence={
+                    "execution_record_id": execution_record.id,
+                    "error_type": type(exc).__name__,
+                    "error_details": str(exc),
+                },
+            )
+            self.db.add(error_rec)
 
             # Revert agent presence to ERROR upon failure
             await presence_svc.set_error(

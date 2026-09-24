@@ -1376,6 +1376,140 @@ describe("Web API Client", () => {
     );
   });
 
+  it("getCompanyErrors and getCompanyErrorSummary perform correct requests", async () => {
+    const mockErrors = {
+      items: [
+        {
+          id: "err-1",
+          company_id: "comp-1",
+          title: "Unhandled NPE",
+          severity: "HIGH",
+          status: "OPEN",
+          detected_by: "agent:Coder",
+          created_at: "2026-09-24T12:00:00Z",
+          evidence: {},
+        },
+      ],
+      total: 1,
+      open_count: 1,
+      investigating_count: 0,
+      resolved_count: 0,
+      verified_count: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockErrors,
+    } as Response);
+
+    const res = await api.getCompanyErrors("comp-1", { status: "OPEN" });
+    expect(res.total).toBe(1);
+    expect(res.items[0].title).toBe("Unhandled NPE");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/errors?status=OPEN",
+      expect.objectContaining({ method: "GET" })
+    );
+
+    const mockSummary = {
+      total_errors: 5,
+      open_count: 2,
+      critical_count: 1,
+      resolved_count: 2,
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockSummary,
+    } as Response);
+
+    const summary = await api.getCompanyErrorSummary("comp-1");
+    expect(summary.total_errors).toBe(5);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/errors/summary",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("createError, assignError, resolveError, verifyError perform correct mutations", async () => {
+    const mockError = {
+      id: "err-1",
+      company_id: "comp-1",
+      title: "Broken route",
+      severity: "CRITICAL",
+      status: "OPEN",
+      detected_by: "QA Tester",
+      created_at: "2026-09-24T12:00:00Z",
+      evidence: {},
+    };
+
+    // 1. Create
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockError,
+    } as Response);
+
+    const created = await api.createError("comp-1", {
+      title: "Broken route",
+      detected_by: "QA Tester",
+      severity: "CRITICAL",
+    });
+    expect(created.id).toBe("err-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/errors",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 2. Assign
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...mockError, status: "ASSIGNED", assigned_to: "Lead Dev" }),
+    } as Response);
+
+    const assigned = await api.assignError("comp-1", "err-1", { assigned_to: "Lead Dev" });
+    expect(assigned.status).toBe("ASSIGNED");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/errors/err-1/assign",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 3. Resolve
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...mockError, status: "RESOLVED", resolution: "Fixed logic" }),
+    } as Response);
+
+    const resolved = await api.resolveError("comp-1", "err-1", {
+      resolved_by: "Lead Dev",
+      resolution: "Fixed logic",
+    });
+    expect(resolved.status).toBe("RESOLVED");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/errors/err-1/resolve",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 4. Verify
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...mockError, status: "VERIFIED", verified_by: "Auditor" }),
+    } as Response);
+
+    const verified = await api.verifyError("comp-1", "err-1", {
+      verified_by: "Auditor",
+      evidence: { passed: true },
+    });
+    expect(verified.status).toBe("VERIFIED");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/errors/err-1/verify",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

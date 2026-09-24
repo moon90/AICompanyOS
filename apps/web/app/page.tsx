@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Bot,
+  Bug,
   Building2,
   CheckCircle2,
   CheckSquare,
@@ -26,6 +27,7 @@ import {
   User,
   ActivityEvent,
   AgentPresence,
+  ErrorSummary,
   PresenceSummary,
 } from "@/lib/api";
 import { ShellLayout } from "@/components/shell/ShellLayout";
@@ -71,6 +73,7 @@ export default function DashboardPage() {
   const [recentActivity, setRecentActivity] = useState<ActivityEvent[]>([]);
   const [presenceSummary, setPresenceSummary] = useState<PresenceSummary | null>(null);
   const [activePresences, setActivePresences] = useState<AgentPresence[]>([]);
+  const [errorSummary, setErrorSummary] = useState<ErrorSummary | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
 
@@ -88,7 +91,7 @@ export default function DashboardPage() {
       setActiveCompany(primaryCompany);
       if (primaryCompany) {
         try {
-          const [depts, ags, plns, ctx, projs, tsks, apprs, decs, acts, presSumm, presList] =
+          const [depts, ags, plns, ctx, projs, tsks, apprs, decs, acts, presSumm, presList, errSumm] =
             await Promise.all([
               api.getDepartments(primaryCompany.id).catch(() => []),
               api.getAgents(primaryCompany.id).catch(() => []),
@@ -103,6 +106,7 @@ export default function DashboardPage() {
               api.getActivity(primaryCompany.id, { limit: 5 }).catch(() => ({ items: [], total: 0 })),
               api.getPresenceSummary(primaryCompany.id).catch(() => null),
               api.getCompanyPresence(primaryCompany.id).catch(() => ({ items: [], total: 0 })),
+              api.getCompanyErrorSummary(primaryCompany.id).catch(() => null),
             ]);
           setDepartmentCount(depts.length);
           setAgentCount(ags.length);
@@ -118,6 +122,7 @@ export default function DashboardPage() {
           setRecentActivity(acts.items);
           setPresenceSummary(presSumm);
           setActivePresences(presList.items);
+          setErrorSummary(errSumm);
         } catch {
           setDepartmentCount(0);
           setAgentCount(0);
@@ -131,6 +136,7 @@ export default function DashboardPage() {
           setRecentActivity([]);
           setPresenceSummary(null);
           setActivePresences([]);
+          setErrorSummary(null);
         }
       } else {
         setDepartmentCount(0);
@@ -145,6 +151,7 @@ export default function DashboardPage() {
         setRecentActivity([]);
         setPresenceSummary(null);
         setActivePresences([]);
+        setErrorSummary(null);
       }
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
@@ -226,6 +233,36 @@ export default function DashboardPage() {
           ? "border-emerald-500/20"
           : "border-slate-700/40",
     },
+    {
+      title: "Errors & Bugs",
+      value: errorSummary
+        ? (errorSummary.open_count + errorSummary.investigating_count + errorSummary.assigned_count).toString()
+        : "0",
+      subtext:
+        errorSummary && errorSummary.critical_count > 0
+          ? `${errorSummary.critical_count} critical alerts requiring action`
+          : "0 critical bugs",
+      phaseNote: "Phase 15 Error Console",
+      icon: Bug,
+      accentColor:
+        errorSummary && errorSummary.critical_count > 0
+          ? "text-rose-400"
+          : errorSummary && (errorSummary.open_count + errorSummary.investigating_count) > 0
+          ? "text-amber-400"
+          : "text-slate-400",
+      bgColor:
+        errorSummary && errorSummary.critical_count > 0
+          ? "bg-rose-500/10"
+          : errorSummary && (errorSummary.open_count + errorSummary.investigating_count) > 0
+          ? "bg-amber-500/10"
+          : "bg-slate-800/40",
+      borderColor:
+        errorSummary && errorSummary.critical_count > 0
+          ? "border-rose-500/25"
+          : errorSummary && (errorSummary.open_count + errorSummary.investigating_count) > 0
+          ? "border-amber-500/20"
+          : "border-slate-700/40",
+    },
   ];
 
   return (
@@ -295,7 +332,7 @@ export default function DashboardPage() {
         )}
 
         {/* Top Metric Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {metricCards.map((card) => {
             const Icon = card.icon;
             return (

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Activity,
   Bot,
+  Bug,
   Building2,
   CheckSquare,
   FolderGit2,
@@ -111,6 +112,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           phaseBadge: "Phase 10",
           isCurrent: pathname === "/approvals",
         },
+        {
+          name: "Errors & Bugs",
+          href: "/errors",
+          icon: Bug,
+          phaseBadge: "Phase 15",
+          isCurrent: pathname === "/errors",
+        },
       ],
     },
     {
@@ -214,14 +222,14 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
       {/* Phase Boundary Widget per UI.md § 21 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Agent Presence</span>
+          <span className="text-slate-400 font-medium">Error &amp; Bug Tracking</span>
           <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Phase 14 Active
+            Phase 15 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Real-time agent presence, operational states &amp; heartbeat telemetry active in <strong className="text-slate-300">Phase 14</strong>.
+          Operational error discovery, triage, investigation &amp; proof verification active in <strong className="text-slate-300">Phase 15</strong>.
         </p>
       </div>
 

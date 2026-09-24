@@ -102,6 +102,11 @@ class User(Base):
         back_populates="decided_by_user",
         foreign_keys="CompanyDecision.decided_by_user_id",
     )
+    assigned_errors: Mapped[list["ErrorRecord"]] = relationship(
+        "ErrorRecord",
+        back_populates="assigned_user",
+        foreign_keys="ErrorRecord.assigned_user_id",
+    )
 
 
 class UserSession(Base):
@@ -241,6 +246,11 @@ class Company(Base):
     )
     agent_presences: Mapped[list["AgentPresence"]] = relationship(
         "AgentPresence",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    errors: Mapped[list["ErrorRecord"]] = relationship(
+        "ErrorRecord",
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -448,6 +458,11 @@ class Agent(Base):
         uselist=False,
         back_populates="agent",
         cascade="all, delete-orphan",
+    )
+    assigned_errors: Mapped[list["ErrorRecord"]] = relationship(
+        "ErrorRecord",
+        back_populates="assigned_agent",
+        foreign_keys="ErrorRecord.assigned_agent_id",
     )
 
 
@@ -715,6 +730,10 @@ class Project(Base):
         back_populates="current_project",
         foreign_keys="AgentPresence.current_project_id",
     )
+    errors: Mapped[list["ErrorRecord"]] = relationship(
+        "ErrorRecord",
+        back_populates="project",
+    )
 
 
 class Task(Base):
@@ -879,6 +898,10 @@ class Task(Base):
         "AgentPresence",
         back_populates="current_task",
         foreign_keys="AgentPresence.current_task_id",
+    )
+    errors: Mapped[list["ErrorRecord"]] = relationship(
+        "ErrorRecord",
+        back_populates="task",
     )
 
 
@@ -1609,3 +1632,107 @@ Index("ix_agent_presence_company_status", AgentPresence.company_id, AgentPresenc
 Index(
     "ix_agent_presence_company_heartbeat", AgentPresence.company_id, AgentPresence.last_heartbeat_at
 )
+
+
+class ErrorRecord(Base):
+    """Authoritative error and bug management record adhering to docs/Phases.md Section 19.
+
+    Captures structured discovery, assignment, investigation, resolution, and verification.
+    """
+
+    __tablename__ = "errors"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    severity: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="MEDIUM",
+        server_default="MEDIUM",
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="OPEN",
+        server_default="OPEN",
+        index=True,
+    )
+    detected_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    assigned_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    investigated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    verified_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    assigned_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assigned_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="errors")
+    project: Mapped["Project | None"] = relationship("Project", back_populates="errors")
+    task: Mapped["Task | None"] = relationship("Task", back_populates="errors")
+    assigned_agent: Mapped["Agent | None"] = relationship(
+        "Agent", foreign_keys=[assigned_agent_id], back_populates="assigned_errors"
+    )
+    assigned_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[assigned_user_id], back_populates="assigned_errors"
+    )
+
+
+Index("ix_errors_company_status", ErrorRecord.company_id, ErrorRecord.status)
+Index("ix_errors_company_severity", ErrorRecord.company_id, ErrorRecord.severity)
+Index("ix_errors_company_created", ErrorRecord.company_id, ErrorRecord.created_at)

@@ -1468,6 +1468,149 @@ export const api = {
       }
     );
   },
+
+  async getCompanyErrors(
+    companyId: string,
+    params?: {
+      status?: ErrorStatus;
+      severity?: ErrorSeverity;
+      project_id?: string;
+      task_id?: string;
+      assigned_to?: string;
+      offset?: number;
+      limit?: number;
+    }
+  ): Promise<ErrorListResponse> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.severity) query.set("severity", params.severity);
+    if (params?.project_id) query.set("project_id", params.project_id);
+    if (params?.task_id) query.set("task_id", params.task_id);
+    if (params?.assigned_to) query.set("assigned_to", params.assigned_to);
+    if (params?.offset !== undefined) query.set("offset", params.offset.toString());
+    if (params?.limit !== undefined) query.set("limit", params.limit.toString());
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return request<ErrorListResponse>(
+      `/api/v1/companies/${companyId}/errors${qs}`,
+      { method: "GET" }
+    );
+  },
+
+  async getCompanyErrorSummary(companyId: string): Promise<ErrorSummary> {
+    return request<ErrorSummary>(
+      `/api/v1/companies/${companyId}/errors/summary`,
+      { method: "GET" }
+    );
+  },
+
+  async getError(companyId: string, errorId: string): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}`,
+      { method: "GET" }
+    );
+  },
+
+  async createError(
+    companyId: string,
+    data: ErrorCreatePayload
+  ): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async updateError(
+    companyId: string,
+    errorId: string,
+    data: ErrorUpdatePayload
+  ): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async assignError(
+    companyId: string,
+    errorId: string,
+    data: ErrorAssignPayload
+  ): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}/assign`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async startErrorInvestigation(
+    companyId: string,
+    errorId: string,
+    investigatedBy?: string
+  ): Promise<ErrorRecord> {
+    const qs = investigatedBy ? `?investigated_by=${encodeURIComponent(investigatedBy)}` : "";
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}/investigate${qs}`,
+      { method: "POST" }
+    );
+  },
+
+  async resolveError(
+    companyId: string,
+    errorId: string,
+    data: ErrorResolvePayload
+  ): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}/resolve`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async verifyError(
+    companyId: string,
+    errorId: string,
+    data: ErrorVerifyPayload
+  ): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}/verify`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async reopenError(
+    companyId: string,
+    errorId: string,
+    reason: string
+  ): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}/reopen`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }
+    );
+  },
+
+  async closeError(companyId: string, errorId: string): Promise<ErrorRecord> {
+    return request<ErrorRecord>(
+      `/api/v1/companies/${companyId}/errors/${errorId}/close`,
+      { method: "POST" }
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -1640,6 +1783,124 @@ export interface CeoInquiryResponse {
   citations: CeoInquiryCitation[];
   grounded_state_timestamp: string;
 }
+
+export type ErrorSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+
+export type ErrorStatus =
+  | "OPEN"
+  | "TRIAGED"
+  | "ASSIGNED"
+  | "INVESTIGATING"
+  | "BLOCKED"
+  | "RESOLVED"
+  | "VERIFYING"
+  | "VERIFIED"
+  | "REOPENED"
+  | "CLOSED";
+
+export interface ErrorRecord {
+  id: string;
+  company_id: string;
+  project_id?: string | null;
+  project_name?: string | null;
+  task_id?: string | null;
+  task_title?: string | null;
+  title: string;
+  description?: string | null;
+  severity: ErrorSeverity;
+  status: ErrorStatus;
+  detected_by: string;
+  assigned_to?: string | null;
+  investigated_by?: string | null;
+  resolved_by?: string | null;
+  verified_by?: string | null;
+  assigned_agent_id?: string | null;
+  assigned_agent_name?: string | null;
+  assigned_user_id?: string | null;
+  assigned_user_name?: string | null;
+  root_cause?: string | null;
+  resolution?: string | null;
+  evidence: Record<string, unknown>;
+  created_at: string;
+  resolved_at?: string | null;
+  verified_at?: string | null;
+}
+
+export interface ErrorListResponse {
+  items: ErrorRecord[];
+  total: number;
+  open_count: number;
+  investigating_count: number;
+  resolved_count: number;
+  verified_count: number;
+}
+
+export interface ErrorSummary {
+  total_errors: number;
+  open_count: number;
+  triaged_count: number;
+  assigned_count: number;
+  investigating_count: number;
+  blocked_count: number;
+  resolved_count: number;
+  verifying_count: number;
+  verified_count: number;
+  reopened_count: number;
+  closed_count: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+}
+
+export interface ErrorCreatePayload {
+  title: string;
+  description?: string | null;
+  severity?: ErrorSeverity;
+  detected_by: string;
+  project_id?: string | null;
+  task_id?: string | null;
+  assigned_to?: string | null;
+  assigned_agent_id?: string | null;
+  assigned_user_id?: string | null;
+  evidence?: Record<string, unknown>;
+}
+
+export interface ErrorUpdatePayload {
+  title?: string;
+  description?: string | null;
+  severity?: ErrorSeverity;
+  status?: ErrorStatus;
+  assigned_to?: string | null;
+  assigned_agent_id?: string | null;
+  assigned_user_id?: string | null;
+  investigated_by?: string | null;
+  resolved_by?: string | null;
+  verified_by?: string | null;
+  root_cause?: string | null;
+  resolution?: string | null;
+  evidence?: Record<string, unknown>;
+}
+
+export interface ErrorAssignPayload {
+  assigned_to: string;
+  assigned_agent_id?: string | null;
+  assigned_user_id?: string | null;
+}
+
+export interface ErrorResolvePayload {
+  resolved_by: string;
+  resolution: string;
+  root_cause?: string | null;
+  evidence?: Record<string, unknown>;
+}
+
+export interface ErrorVerifyPayload {
+  verified_by: string;
+  evidence: Record<string, unknown>;
+  close_immediately?: boolean;
+}
+
 
 
 
