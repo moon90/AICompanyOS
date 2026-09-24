@@ -1744,6 +1744,101 @@ export const api = {
       `/api/v1/companies/${companyId}/realtime/status`
     );
   },
+
+  async getCompanyArtifacts(
+    companyId: string,
+    params?: {
+      project_id?: string;
+      task_id?: string;
+      artifact_type?: string;
+      search?: string;
+      page?: number;
+      page_size?: number;
+    }
+  ): Promise<ArtifactListResponse> {
+    const q = new URLSearchParams();
+    if (params?.project_id) q.set("project_id", params.project_id);
+    if (params?.task_id) q.set("task_id", params.task_id);
+    if (params?.artifact_type) q.set("artifact_type", params.artifact_type);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", params.page.toString());
+    if (params?.page_size) q.set("page_size", params.page_size.toString());
+    const qs = q.toString() ? `?${q.toString()}` : "";
+    return request<ArtifactListResponse>(
+      `/api/v1/companies/${companyId}/artifacts${qs}`
+    );
+  },
+
+  async getArtifact(
+    companyId: string,
+    artifactId: string
+  ): Promise<Artifact> {
+    return request<Artifact>(
+      `/api/v1/companies/${companyId}/artifacts/${artifactId}`
+    );
+  },
+
+  async createArtifact(
+    companyId: string,
+    data: ArtifactCreatePayload
+  ): Promise<Artifact> {
+    return request<Artifact>(
+      `/api/v1/companies/${companyId}/artifacts`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async updateArtifact(
+    companyId: string,
+    artifactId: string,
+    data: ArtifactUpdatePayload
+  ): Promise<Artifact> {
+    return request<Artifact>(
+      `/api/v1/companies/${companyId}/artifacts/${artifactId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async createArtifactVersion(
+    companyId: string,
+    artifactId: string,
+    data: ArtifactVersionCreatePayload
+  ): Promise<Artifact> {
+    return request<Artifact>(
+      `/api/v1/companies/${companyId}/artifacts/${artifactId}/versions`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async getArtifactVersions(
+    companyId: string,
+    artifactId: string
+  ): Promise<ArtifactVersionItem[]> {
+    return request<ArtifactVersionItem[]>(
+      `/api/v1/companies/${companyId}/artifacts/${artifactId}/versions`
+    );
+  },
+
+  async deleteArtifact(
+    companyId: string,
+    artifactId: string
+  ): Promise<void> {
+    return request<void>(
+      `/api/v1/companies/${companyId}/artifacts/${artifactId}`,
+      {
+        method: "DELETE",
+      }
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -2177,3 +2272,91 @@ export interface RealtimeEmitPayload {
   task_id?: string | null;
   metadata?: Record<string, unknown>;
 }
+
+export type ArtifactType =
+  | "MARKDOWN"
+  | "TEXT"
+  | "PDF"
+  | "CSV"
+  | "JSON"
+  | "IMAGE"
+  | "CODE"
+  | "REPORT"
+  | "DOCUMENT";
+
+export interface Artifact {
+  id: string;
+  company_id: string;
+  project_id?: string | null;
+  task_id?: string | null;
+  created_by_agent_id?: string | null;
+  created_by_user_id?: string | null;
+  creator_name: string;
+  name: string;
+  artifact_type: ArtifactType | string;
+  version: number;
+  parent_artifact_id?: string | null;
+  location?: string | null;
+  content?: string | null;
+  file_size_bytes: number;
+  change_summary?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ArtifactVersionItem {
+  id: string;
+  version: number;
+  creator_name: string;
+  change_summary?: string | null;
+  file_size_bytes: number;
+  created_at: string;
+  parent_artifact_id?: string | null;
+}
+
+export interface ArtifactListResponse {
+  items: Artifact[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ArtifactCreatePayload {
+  name: string;
+  artifact_type?: ArtifactType | string;
+  project_id?: string | null;
+  task_id?: string | null;
+  creator_name?: string | null;
+  created_by_agent_id?: string | null;
+  created_by_user_id?: string | null;
+  location?: string | null;
+  content?: string | null;
+  file_size_bytes?: number | null;
+  change_summary?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ArtifactUpdatePayload {
+  name?: string;
+  artifact_type?: ArtifactType | string;
+  project_id?: string | null;
+  task_id?: string | null;
+  location?: string | null;
+  content?: string | null;
+  file_size_bytes?: number | null;
+  change_summary?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ArtifactVersionCreatePayload {
+  content?: string | null;
+  location?: string | null;
+  change_summary: string;
+  creator_name?: string | null;
+  created_by_agent_id?: string | null;
+  created_by_user_id?: string | null;
+  file_size_bytes?: number | null;
+  metadata?: Record<string, unknown>;
+}
+

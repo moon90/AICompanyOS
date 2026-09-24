@@ -9,9 +9,12 @@ import {
   Bug,
   Building2,
   CheckSquare,
+  Code2,
+  FileText,
   FolderGit2,
   LayoutDashboard,
   LogOut,
+  Radio,
   Settings,
   ShieldAlert,
   User as UserIcon,
@@ -119,6 +122,27 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           phaseBadge: "Phase 15",
           isCurrent: pathname === "/errors",
         },
+        {
+          name: "Engineering",
+          href: "/engineering",
+          icon: Code2,
+          phaseBadge: "Phase 16",
+          isCurrent: pathname === "/engineering",
+        },
+        {
+          name: "Real-Time Ops",
+          href: "/realtime",
+          icon: Radio,
+          phaseBadge: "Phase 17",
+          isCurrent: pathname === "/realtime",
+        },
+        {
+          name: "Documents & Artifacts",
+          href: "/artifacts",
+          icon: FileText,
+          phaseBadge: "Phase 18",
+          isCurrent: pathname === "/artifacts",
+        },
       ],
     },
     {
@@ -222,14 +246,14 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
       {/* Phase Boundary Widget per UI.md § 21 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Real-Time Operations</span>
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Phase 17 Active
+          <span className="text-slate-400 font-medium">Documents &amp; Artifacts</span>
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-indigo-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+            Phase 18 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Live SSE event streaming, automated background telemetry refresh &amp; real-time operations active in <strong className="text-slate-300">Phase 17</strong>.
+          Authoritative multi-tenant artifact management, version lineage &amp; rich document preview active in <strong className="text-slate-300">Phase 18</strong>.
         </p>
       </div>
 

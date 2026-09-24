@@ -259,6 +259,11 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -743,6 +748,10 @@ class Project(Base):
         "ErrorRecord",
         back_populates="project",
     )
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact",
+        back_populates="project",
+    )
 
 
 class Task(Base):
@@ -922,6 +931,10 @@ class Task(Base):
         "TaskFileChange",
         back_populates="task",
         cascade="all, delete-orphan",
+    )
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact",
+        back_populates="task",
     )
 
 
@@ -1907,3 +1920,119 @@ Index("ix_task_eng_company_task", TaskEngineeringContext.company_id, TaskEnginee
 Index("ix_task_file_changes_company_task", TaskFileChange.company_id, TaskFileChange.task_id)
 Index("ix_task_file_changes_company_file", TaskFileChange.company_id, TaskFileChange.file_path)
 Index("ix_task_file_changes_company_branch", TaskFileChange.company_id, TaskFileChange.branch)
+
+
+class Artifact(Base):
+    """Authoritative Artifact and Document entity adhering to docs/Phases.md Section 22 and docs/Memory.md Section 31."""
+
+    __tablename__ = "artifacts"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    creator_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    artifact_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="DOCUMENT",
+        server_default="DOCUMENT",
+        index=True,
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    parent_artifact_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    location: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_size_bytes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    artifact_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="artifacts")
+    project: Mapped["Project | None"] = relationship("Project", back_populates="artifacts")
+    task: Mapped["Task | None"] = relationship("Task", back_populates="artifacts")
+    created_by_agent: Mapped["Agent | None"] = relationship(
+        "Agent", foreign_keys=[created_by_agent_id]
+    )
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    parent_artifact: Mapped["Artifact | None"] = relationship(
+        "Artifact",
+        remote_side=[id],
+        back_populates="child_versions",
+    )
+    child_versions: Mapped[list["Artifact"]] = relationship(
+        "Artifact",
+        back_populates="parent_artifact",
+    )
+
+
+Index("ix_artifacts_company_type", Artifact.company_id, Artifact.artifact_type)
+Index("ix_artifacts_company_project", Artifact.company_id, Artifact.project_id)
+Index("ix_artifacts_company_task", Artifact.company_id, Artifact.task_id)
+Index("ix_artifacts_company_parent", Artifact.company_id, Artifact.parent_artifact_id)
+Index("ix_artifacts_company_created", Artifact.company_id, Artifact.created_at)

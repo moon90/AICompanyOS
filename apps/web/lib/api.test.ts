@@ -1750,6 +1750,155 @@ describe("Web API Client", () => {
     }
   });
 
+  it("getCompanyArtifacts sends GET with query filters", async () => {
+    const mockList = {
+      items: [
+        {
+          id: "art-1",
+          company_id: "comp-1",
+          name: "Design Doc",
+          artifact_type: "MARKDOWN",
+          version: 1,
+          file_size_bytes: 120,
+          creator_name: "Operator",
+          metadata: {},
+          created_at: "2026-09-24T00:00:00Z",
+          updated_at: "2026-09-24T00:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockList,
+    } as Response);
+
+    const res = await api.getCompanyArtifacts("comp-1", {
+      artifact_type: "MARKDOWN",
+      search: "Design",
+    });
+    expect(res.total).toBe(1);
+    expect(res.items[0].name).toBe("Design Doc");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/artifacts?artifact_type=MARKDOWN&search=Design",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("createArtifact, updateArtifact, and deleteArtifact perform correct requests", async () => {
+    const mockArtifact = {
+      id: "art-1",
+      company_id: "comp-1",
+      name: "Architecture Blueprint",
+      artifact_type: "MARKDOWN",
+      version: 1,
+      file_size_bytes: 250,
+      creator_name: "Lead Operator",
+      content: "# Blueprint",
+      metadata: {},
+      created_at: "2026-09-24T00:00:00Z",
+      updated_at: "2026-09-24T00:00:00Z",
+    };
+
+    // createArtifact
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockArtifact,
+    } as Response);
+
+    const created = await api.createArtifact("comp-1", {
+      name: "Architecture Blueprint",
+      content: "# Blueprint",
+    });
+    expect(created.id).toBe("art-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/artifacts",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "Architecture Blueprint", content: "# Blueprint" }),
+      })
+    );
+
+    // updateArtifact
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...mockArtifact, name: "Updated Blueprint" }),
+    } as Response);
+
+    const updated = await api.updateArtifact("comp-1", "art-1", { name: "Updated Blueprint" });
+    expect(updated.name).toBe("Updated Blueprint");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/artifacts/art-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ name: "Updated Blueprint" }),
+      })
+    );
+
+    // deleteArtifact
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: async () => ({}),
+    } as Response);
+
+    await api.deleteArtifact("comp-1", "art-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/artifacts/art-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("createArtifactVersion and getArtifactVersions perform versioning requests", async () => {
+    const mockV2 = {
+      id: "art-v2",
+      company_id: "comp-1",
+      name: "Spec",
+      version: 2,
+      parent_artifact_id: "art-1",
+      change_summary: "Added section 2",
+      creator_name: "Engineer",
+      file_size_bytes: 400,
+      metadata: {},
+      created_at: "2026-09-24T00:00:00Z",
+      updated_at: "2026-09-24T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockV2,
+    } as Response);
+
+    const v2 = await api.createArtifactVersion("comp-1", "art-1", {
+      change_summary: "Added section 2",
+      content: "# Spec v2",
+    });
+    expect(v2.version).toBe(2);
+    expect(v2.parent_artifact_id).toBe("art-1");
+
+    // getArtifactVersions
+    const mockVersions = [
+      { id: "art-1", version: 1, creator_name: "Engineer", file_size_bytes: 200, created_at: "2026-09-24T00:00:00Z" },
+      { id: "art-v2", version: 2, creator_name: "Engineer", file_size_bytes: 400, created_at: "2026-09-24T00:00:00Z" },
+    ];
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockVersions,
+    } as Response);
+
+    const versions = await api.getArtifactVersions("comp-1", "art-1");
+    expect(versions).toHaveLength(2);
+    expect(versions[1].version).toBe(2);
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

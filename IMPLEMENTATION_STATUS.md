@@ -826,19 +826,69 @@
 
 ---
 
+### Phase 18 — Documents & Artifacts (COMPLETE)
+* **Authoritative Persistence Layer (`infrastructure/database/models.py`, `database/migrations/`):**
+  - Added `Artifact` model mapped to `artifacts` table:
+    - Primary key UUID `id`, `company_id` (foreign key to `companies.id`, cascade delete).
+    - Optional `project_id` and `task_id` foreign keys (ondelete set null).
+    - `created_by_agent_id` and `created_by_user_id` foreign keys with `creator_name` attribution.
+    - `name` (indexed), `artifact_type` (StrEnum, indexed).
+    - `version` (integer lineage counter), `parent_artifact_id` (self-referential foreign key to `artifacts.id` for lineage tracing).
+    - `location` (URI/path), `content` (direct inline text/markdown/code/json/csv storage), `file_size_bytes` (integer).
+    - `change_summary` (text), `metadata` (JSON column mapped via `artifact_metadata`).
+    - Compound indexes: `ix_artifacts_company_type`, `ix_artifacts_company_project`, `ix_artifacts_company_task`, `ix_artifacts_company_parent`, `ix_artifacts_company_created`.
+  - Added relationships on `Company.artifacts`, `Project.artifacts`, `Task.artifacts`.
+  - Migration `0016_create_artifacts.py` applied and verified with `alembic check` (0 schema drift).
+* **Domain Layer (`domain/artifacts/`):**
+  - `ArtifactType`: `MARKDOWN`, `TEXT`, `PDF`, `CSV`, `JSON`, `IMAGE`, `CODE`, `REPORT`, `DOCUMENT`.
+  - Schemas: `ArtifactCreatePayload`, `ArtifactUpdatePayload`, `ArtifactVersionCreatePayload`, `ArtifactResponse`, `ArtifactVersionItem`, `ArtifactListResponse`.
+  - Domain exceptions in `domain/artifacts/exceptions.py`: `ArtifactError`, `ArtifactNotFoundError`, `ArtifactAccessDeniedError`, `InvalidArtifactOperationError`.
+* **Application Services (`application/services/artifact_service.py`):**
+  - Implemented `ArtifactService`:
+    - `create_artifact`: Creates root (v1) artifacts with creator attribution, file size computation, and emits `artifact.created` activity event.
+    - `get_artifact`: Multi-tenant retrieval with tenant isolation.
+    - `list_artifacts`: Filtering by project, task, artifact_type, search query (title, author, location, summary), and pagination.
+    - `update_artifact`: Updates mutable metadata, content, and logs `artifact.updated`.
+    - `create_new_version`: Increments version (`v1` → `v2` → `v3`), links to root `parent_artifact_id`, records change summary, and logs `artifact.versioned`.
+    - `get_version_history`: Retrieves all versions belonging to an artifact's lineage.
+    - `delete_artifact`: Deletes artifact and logs `artifact.deleted`.
+  - Updated `SystemService`: `CURRENT_PHASE = "Phase 18 — Documents & Artifacts"`.
+* **API Layer (`apps/api/routes/artifacts.py`):**
+  - Mounted `/api/v1/companies/{company_id}/artifacts` endpoints:
+    - `POST /`: Create artifact.
+    - `GET /`: List artifacts with filters and pagination.
+    - `GET /{artifact_id}`: Get artifact details.
+    - `PATCH /{artifact_id}`: Update artifact.
+    - `POST /{artifact_id}/versions`: Create new version.
+    - `GET /{artifact_id}/versions`: List version history.
+    - `DELETE /{artifact_id}`: Delete artifact.
+  - Registered `artifacts_router` in `apps/api/main.py`.
+* **Frontend Layer (`apps/web/`):**
+  - `apps/web/lib/api.ts`: Added Artifact types and client methods (`getCompanyArtifacts`, `getArtifact`, `createArtifact`, `updateArtifact`, `createArtifactVersion`, `getArtifactVersions`, `deleteArtifact`).
+  - `apps/web/lib/api.test.ts`: Added unit tests for artifact API methods (51/51 Vitest tests passed).
+  - `apps/web/components/shell/Sidebar.tsx`: Added `/artifacts` navigation item with `Phase 18` badge, updated Phase Boundary Widget to `Phase 18 Active: Documents & Artifacts`.
+  - `apps/web/app/artifacts/page.tsx`:
+    - Executive KPI cards: Total Artifacts, Specs & Documents, Code & JSON, Datasets & Assets.
+    - Interactive filter bar: text search, type filter tabs ("ALL", "MARKDOWN", "CODE", "JSON", "CSV", "REPORT"), project dropdown.
+    - Artifact cards with type badges, version pills, author attribution, file size, change summaries, and actions.
+    - Slide-out Document Preview Drawer with version lineage switcher, pre-wrap content viewer, JSON metadata inspector, copy, and download actions.
+    - Create Artifact modal and Create New Version modal.
+
+---
+
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (195 passed in 22.80s) |
-| **Realtime Dispatcher Tests** | `pytest tests/unit/test_realtime_dispatcher.py tests/integration/test_api_realtime.py` | **PASSED** (8 tests in 1.45s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 222 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (222 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (214 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (48 tests in 2 files in 272ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (206 passed in 25.07s) |
+| **Artifact Service & API Tests** | `pytest tests/unit/test_artifact_service.py tests/integration/test_api_artifacts.py` | **PASSED** (11 tests in 2.08s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 231 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (231 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (223 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (51 tests in 2 files in 303ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
-| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (16 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0015` applied on PostgreSQL) |
+| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (17 routes compiled, static generation verified) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0016` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
 | **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all queries) |
 
@@ -846,20 +896,19 @@
 
 ## Important Architectural Decisions
 
-1. **Database Remains Authoritative (`docs/Memory.md` § 47):**
-   The real-time layer distributes changes; it does not replace or compete with PostgreSQL transactions. If SSE fails or reconnects, company state is safe and reloads gracefully.
-2. **Backpressure & Bounded Memory:**
-   `EventDispatcher` enforces `maxsize` on subscriber queues, dropping the oldest events for lagging clients to ensure memory stability.
-3. **Decoupled Real-Time Failure Isolation:**
-   Failures in real-time event dispatching never compromise or rollback authoritative database transactions in `ActivityService`.
-4. **SSE vs WebSockets for Operational Broadcast:**
-   Server-Sent Events (SSE) was selected for unidirectional telemetry streaming, providing native HTTP/2 multiplexing, automatic browser reconnection, and simplicity without WebSocket framing overhead.
+1. **Database Remains Authoritative (`docs/Memory.md` § 31):**
+   PostgreSQL stores all artifact metadata, version lineage, and direct inline text content, avoiding external storage dependencies for markdown, code, and JSON deliverables.
+2. **Self-Referential Version Lineage:**
+   `parent_artifact_id` links incremented versions back to the root document, enabling clean version trees and history querying without duplicate tables.
+3. **Attribution & Audit Trails:**
+   Every artifact creation and version publish automatically captures creator attribution (Agent or User) and records an immutable activity event in `ActivityService`.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 18 — Documents & Artifacts**
+**Phase 19 — Finance & Budgets**
 *(Awaiting user authorization before proceeding).*
+
 
 
