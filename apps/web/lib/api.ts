@@ -1611,6 +1611,57 @@ export const api = {
       { method: "POST" }
     );
   },
+
+  async getTaskEngineeringView(
+    companyId: string,
+    taskId: string
+  ): Promise<EngineeringTaskView> {
+    return request<EngineeringTaskView>(
+      `/api/v1/companies/${companyId}/engineering/tasks/${taskId}`
+    );
+  },
+
+  async upsertEngineeringContext(
+    companyId: string,
+    taskId: string,
+    data: EngineeringContextUpsertPayload
+  ): Promise<TaskEngineeringContext> {
+    return request<TaskEngineeringContext>(
+      `/api/v1/companies/${companyId}/engineering/tasks/${taskId}/context`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async recordTaskFileChanges(
+    companyId: string,
+    taskId: string,
+    changes: FileChangeCreatePayload[]
+  ): Promise<TaskFileChange[]> {
+    return request<TaskFileChange[]>(
+      `/api/v1/companies/${companyId}/engineering/tasks/${taskId}/files`,
+      {
+        method: "POST",
+        body: JSON.stringify({ changes }),
+      }
+    );
+  },
+
+  async getCompanyFileHistory(
+    companyId: string,
+    branch?: string,
+    limit?: number
+  ): Promise<CompanyFileHistoryItem[]> {
+    const params = new URLSearchParams();
+    if (branch) params.set("branch", branch);
+    if (limit) params.set("limit", limit.toString());
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return request<CompanyFileHistoryItem[]>(
+      `/api/v1/companies/${companyId}/engineering/files${qs}`
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -1899,6 +1950,95 @@ export interface ErrorVerifyPayload {
   verified_by: string;
   evidence: Record<string, unknown>;
   close_immediately?: boolean;
+}
+
+export type TestStatus = "PENDING" | "RUNNING" | "PASSED" | "FAILED" | "SKIPPED";
+export type VerificationState = "PENDING" | "IN_REVIEW" | "VERIFIED" | "REJECTED";
+export type FileChangeType = "ADDED" | "MODIFIED" | "DELETED" | "RENAMED";
+
+export interface TaskEngineeringContext {
+  id: string;
+  company_id: string;
+  task_id: string;
+  repository: string;
+  branch: string;
+  pull_request_number?: string | null;
+  pull_request_url?: string | null;
+  pull_request_title?: string | null;
+  commit_count: number;
+  test_status: TestStatus | string;
+  test_output_summary?: string | null;
+  verification_state: VerificationState | string;
+  verification_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskFileChange {
+  id: string;
+  company_id: string;
+  task_id: string;
+  file_path: string;
+  repository: string;
+  branch: string;
+  agent_id?: string | null;
+  agent_name: string;
+  change_type: FileChangeType | string;
+  commit_hash?: string | null;
+  commit_message?: string | null;
+  additions: number;
+  deletions: number;
+  change_summary?: string | null;
+  last_modified_at: string;
+  created_at: string;
+}
+
+export interface EngineeringTaskView {
+  task_id: string;
+  company_id: string;
+  context?: TaskEngineeringContext | null;
+  file_changes: TaskFileChange[];
+  total_files_changed: number;
+  total_additions: number;
+  total_deletions: number;
+}
+
+export interface CompanyFileHistoryItem {
+  file_path: string;
+  repository: string;
+  branches: string[];
+  change_count: number;
+  last_modified_at: string;
+  last_commit_hash?: string | null;
+  last_agent_id?: string | null;
+  last_agent_name?: string | null;
+}
+
+export interface EngineeringContextUpsertPayload {
+  repository?: string;
+  branch?: string;
+  pull_request_number?: string | null;
+  pull_request_url?: string | null;
+  pull_request_title?: string | null;
+  commit_count?: number;
+  test_status?: TestStatus;
+  test_output_summary?: string | null;
+  verification_state?: VerificationState;
+  verification_notes?: string | null;
+}
+
+export interface FileChangeCreatePayload {
+  file_path: string;
+  repository?: string;
+  branch?: string;
+  agent_id?: string | null;
+  agent_name?: string | null;
+  change_type?: FileChangeType;
+  commit_hash?: string | null;
+  commit_message?: string | null;
+  additions?: number;
+  deletions?: number;
+  change_summary?: string | null;
 }
 
 

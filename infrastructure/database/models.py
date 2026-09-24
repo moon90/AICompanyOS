@@ -254,6 +254,11 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    file_changes: Mapped[list["TaskFileChange"]] = relationship(
+        "TaskFileChange",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -463,6 +468,10 @@ class Agent(Base):
         "ErrorRecord",
         back_populates="assigned_agent",
         foreign_keys="ErrorRecord.assigned_agent_id",
+    )
+    file_changes: Mapped[list["TaskFileChange"]] = relationship(
+        "TaskFileChange",
+        back_populates="agent",
     )
 
 
@@ -902,6 +911,17 @@ class Task(Base):
     errors: Mapped[list["ErrorRecord"]] = relationship(
         "ErrorRecord",
         back_populates="task",
+    )
+    engineering_context: Mapped["TaskEngineeringContext | None"] = relationship(
+        "TaskEngineeringContext",
+        back_populates="task",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    file_changes: Mapped[list["TaskFileChange"]] = relationship(
+        "TaskFileChange",
+        back_populates="task",
+        cascade="all, delete-orphan",
     )
 
 
@@ -1736,3 +1756,154 @@ class ErrorRecord(Base):
 Index("ix_errors_company_status", ErrorRecord.company_id, ErrorRecord.status)
 Index("ix_errors_company_severity", ErrorRecord.company_id, ErrorRecord.severity)
 Index("ix_errors_company_created", ErrorRecord.company_id, ErrorRecord.created_at)
+
+
+class TaskEngineeringContext(Base):
+    """Engineering context for a task adhering to docs/Phases.md Section 20.
+
+    Connects task to branch, PR, commit counts, test status, and verification state.
+    """
+
+    __tablename__ = "task_engineering_contexts"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    repository: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="main",
+        server_default="main",
+    )
+    branch: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="main",
+        server_default="main",
+        index=True,
+    )
+    pull_request_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pull_request_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    pull_request_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    commit_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    test_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PENDING",
+        server_default="PENDING",
+        index=True,
+    )
+    test_output_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verification_state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PENDING",
+        server_default="PENDING",
+        index=True,
+    )
+    verification_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company")
+    task: Mapped["Task"] = relationship("Task", back_populates="engineering_context")
+
+
+class TaskFileChange(Base):
+    """File modification tracked for a task adhering to docs/Phases.md Section 20.
+
+    Tracks: file_path, repository, branch, agent, task, last_modified, commit, change_summary.
+    """
+
+    __tablename__ = "task_file_changes"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
+    repository: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="main", server_default="main"
+    )
+    branch: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="main", server_default="main", index=True
+    )
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    agent_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    change_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="MODIFIED",
+        server_default="MODIFIED",
+    )
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    commit_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    commit_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    additions: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    deletions: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_modified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="file_changes")
+    task: Mapped["Task"] = relationship("Task", back_populates="file_changes")
+    agent: Mapped["Agent | None"] = relationship("Agent", back_populates="file_changes")
+
+
+Index("ix_task_eng_company_task", TaskEngineeringContext.company_id, TaskEngineeringContext.task_id)
+Index("ix_task_file_changes_company_task", TaskFileChange.company_id, TaskFileChange.task_id)
+Index("ix_task_file_changes_company_file", TaskFileChange.company_id, TaskFileChange.file_path)
+Index("ix_task_file_changes_company_branch", TaskFileChange.company_id, TaskFileChange.branch)

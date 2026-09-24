@@ -1510,6 +1510,161 @@ describe("Web API Client", () => {
     );
   });
 
+  it("getTaskEngineeringView fetches engineering context and file changes", async () => {
+    const mockView = {
+      task_id: "task-1",
+      company_id: "comp-1",
+      context: {
+        id: "ctx-1",
+        company_id: "comp-1",
+        task_id: "task-1",
+        repository: "moon90/AICompanyOS",
+        branch: "feat/engineering-file-tracking",
+        pull_request_number: "42",
+        pull_request_url: "https://github.com/moon90/AICompanyOS/pull/42",
+        pull_request_title: "feat: Phase 16 tracking",
+        commit_count: 3,
+        test_status: "PASSED",
+        test_output_summary: "All 187 tests passed",
+        verification_state: "VERIFIED",
+        verification_notes: "Reviewed and approved",
+        created_at: "2026-09-24T20:00:00Z",
+        updated_at: "2026-09-24T20:05:00Z",
+      },
+      file_changes: [
+        {
+          id: "fc-1",
+          company_id: "comp-1",
+          task_id: "task-1",
+          file_path: "apps/web/app/tasks/page.tsx",
+          repository: "moon90/AICompanyOS",
+          branch: "feat/engineering-file-tracking",
+          agent_name: "Frontend Agent",
+          change_type: "MODIFIED",
+          commit_hash: "abcd123",
+          additions: 45,
+          deletions: 5,
+          last_modified_at: "2026-09-24T20:00:00Z",
+          created_at: "2026-09-24T20:00:00Z",
+        },
+      ],
+      total_files_changed: 1,
+      total_additions: 45,
+      total_deletions: 5,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockView,
+    } as Response);
+
+    const view = await api.getTaskEngineeringView("comp-1", "task-1");
+    expect(view.task_id).toBe("task-1");
+    expect(view.context?.branch).toBe("feat/engineering-file-tracking");
+    expect(view.total_files_changed).toBe(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/engineering/tasks/task-1",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("upsertEngineeringContext updates task context and verification state", async () => {
+    const mockContext = {
+      id: "ctx-1",
+      company_id: "comp-1",
+      task_id: "task-1",
+      repository: "moon90/AICompanyOS",
+      branch: "feat/engineering-file-tracking",
+      commit_count: 4,
+      test_status: "PASSED",
+      verification_state: "VERIFIED",
+      verification_notes: "QA Verified",
+      created_at: "2026-09-24T20:00:00Z",
+      updated_at: "2026-09-24T20:10:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockContext,
+    } as Response);
+
+    const res = await api.upsertEngineeringContext("comp-1", "task-1", {
+      verification_state: "VERIFIED",
+      verification_notes: "QA Verified",
+    });
+    expect(res.verification_state).toBe("VERIFIED");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/engineering/tasks/task-1/context",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+
+  it("recordTaskFileChanges batches file additions and commits", async () => {
+    const mockFiles = [
+      {
+        id: "fc-1",
+        company_id: "comp-1",
+        task_id: "task-1",
+        file_path: "apps/web/lib/api.ts",
+        repository: "moon90/AICompanyOS",
+        branch: "main",
+        agent_name: "Lead Engineer",
+        change_type: "MODIFIED",
+        additions: 30,
+        deletions: 2,
+        last_modified_at: "2026-09-24T20:00:00Z",
+        created_at: "2026-09-24T20:00:00Z",
+      },
+    ];
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockFiles,
+    } as Response);
+
+    const res = await api.recordTaskFileChanges("comp-1", "task-1", [
+      {
+        file_path: "apps/web/lib/api.ts",
+        additions: 30,
+        deletions: 2,
+      },
+    ]);
+    expect(res).toHaveLength(1);
+    expect(res[0].file_path).toBe("apps/web/lib/api.ts");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/engineering/tasks/task-1/files",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("getCompanyFileHistory retrieves aggregated file touches", async () => {
+    const mockHistory = [
+      {
+        file_path: "apps/web/lib/api.ts",
+        repository: "moon90/AICompanyOS",
+        branches: ["main", "feat/tracking"],
+        change_count: 5,
+        last_modified_at: "2026-09-24T20:00:00Z",
+      },
+    ];
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockHistory,
+    } as Response);
+
+    const res = await api.getCompanyFileHistory("comp-1", "main", 10);
+    expect(res).toEqual(mockHistory);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/engineering/files?branch=main&limit=10",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 14 — Agent Presence** (COMPLETE)
+**Phase 16 — Engineering File Tracking** (COMPLETE)
 
 ---
 
@@ -752,21 +752,58 @@
   * **Production Build:**
     - `npm run build` compiled all 16 routes cleanly with zero TypeScript or ESLint errors.
 
+### Phase 16 — Engineering File Tracking (COMPLETE)
+* **Authoritative Persistence & Models (`infrastructure/database/models.py`):**
+  - `TaskEngineeringContext`: 1-to-1 extension on `Task` storing operational Git metadata: `repository`, `branch`, `commit_hash`, `pull_request_url`, `test_status` (`PENDING`, `RUNNING`, `PASSED`, `FAILED`, `SKIPPED`), `verification_state` (`UNVERIFIED`, `PENDING`, `IN_REVIEW`, `VERIFIED`, `REJECTED`), `test_summary`, `verification_notes`, `verified_by_user_id`, `verified_by_agent_id`, `verified_at`.
+  - `TaskFileChange`: Detailed log of modified files per task with `company_id`, `task_id`, `agent_id`, `agent_name`, `file_path`, `change_type` (`ADD`, `MODIFY`, `DELETE`, `RENAME`), `additions`, `deletions`, `commit_hash`, `commit_message`, `change_summary`, `last_modified_at`.
+  - Configured composite indices for rapid tenant-scoped file queries: `ix_task_file_changes_company_file`, `ix_task_file_changes_task_file`, `ix_task_file_changes_agent`.
+* **Database Migrations:**
+  - Applied Alembic migration `0015_create_file_tracking.py` on PostgreSQL.
+  - Zero schema drift verified via `alembic check`.
+* **Domain Layer (`domain/engineering/`):**
+  - `domain/engineering/exceptions.py`: `EngineeringError`, `EngineeringContextNotFoundError`, `EngineeringAccessDeniedError`, `InvalidEngineeringOperationError`.
+  - `domain/engineering/schemas.py`: `TestStatus` (with `__test__ = False` for clean pytest collection), `VerificationState`, `FileChangeType`, `EngineeringContextUpsertPayload`, `FileChangeCreatePayload`, `FileChangeBulkCreatePayload`, `EngineeringContextResponse`, `FileChangeResponse`, `EngineeringTaskViewResponse`, `CompanyFileHistoryItem`.
+* **Application Services (`application/services/engineering_service.py`):**
+  - `get_task_engineering_view`: Returns task context and full file change audit list with multi-tenant verification.
+  - `upsert_engineering_context`: Idempotently updates or initializes Git branch, repo, PR URL, test statuses, and verification decisions. Logs authoritative events through `ActivityService` (`engineering.context_updated`, `engineering.verified`, `engineering.rejected`). Safely re-fetches records across session flushes.
+  - `record_file_changes`: Inserts one or more file changes associated with a task and agent, incrementing total changes and updating `last_modified_at`.
+  - `get_company_file_history`: Retrieves chronological cross-task file modification history scoped by company.
+  - Updated `SystemService` (`CURRENT_PHASE = "Phase 16 — Engineering File Tracking"`).
+* **API Layer (`apps/api/`):**
+  - Created `apps/api/schemas/engineering.py` and `apps/api/routes/engineering.py`.
+  - Mounted `/api/v1/companies/{company_id}/engineering` routes:
+    - `GET /tasks/{task_id}`: Retrieve task engineering context & tracked files.
+    - `PUT /tasks/{task_id}/context`: Upsert Git metadata, test results, and verification decisions.
+    - `POST /tasks/{task_id}/files`: Record atomic file modifications.
+    - `GET /history`: Tenant-scoped file modification audit trail.
+* **Frontend Engineering & Code Tracking (`apps/web/`):**
+  - `apps/web/lib/api.ts`: Added `TestStatus`, `VerificationState`, `FileChangeType`, `EngineeringContextResponse`, `FileChangeResponse`, `EngineeringTaskViewResponse`, `CompanyFileHistoryItem` types and client methods `getTaskEngineeringView`, `upsertEngineeringContext`, `recordTaskFileChanges`, `getCompanyFileHistory`.
+  - `apps/web/lib/api.test.ts`: Added unit tests for all 4 engineering client methods (45/45 Vitest tests passed).
+  - `apps/web/components/shell/Sidebar.tsx`: Updated Phase Boundary Widget to `Phase 16 Active: Engineering File Tracking`.
+  - `apps/web/app/tasks/page.tsx`:
+    - Embedded rich **Engineering & Code (Phase 16)** panel into Task Inspection Drawer.
+    - Added Git context display (Branch, Repository, Commit, Pull Request hyperlink).
+    - Added Automated Test Status indicator (`PENDING`, `RUNNING`, `PASSED`, `FAILED`, `SKIPPED`).
+    - Added Verification State chip (`UNVERIFIED`, `PENDING`, `IN_REVIEW`, `VERIFIED`, `REJECTED`) with one-click **Verify** and **Reject** quick-action buttons.
+    - Added Tracked Code Files listing showing file paths, diff stats (`+N / -N`), author agent, commit hash, and expandable diff / change summaries.
+    - Added "Log Code File Change" modal to record manual/agent changes.
+    - Added "Configure Git & Verification Context" modal for setting branch, PR, test outcomes, and reviewer notes.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (179 passed in 20.14s) |
-| **Error Management Tests** | `pytest tests/unit/test_error_service.py tests/integration/test_api_errors.py` | **PASSED** (14 tests in 2.33s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 203 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (203 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (195 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (41 tests in 2 files in 340ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (187 passed in 22.34s) |
+| **Engineering Tracking Tests** | `pytest tests/unit/test_engineering_service.py tests/integration/test_api_engineering.py` | **PASSED** (8 tests in 2.21s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 212 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (212 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (204 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (45 tests in 2 files in 253ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
 | **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (16 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0014` applied on PostgreSQL) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0015` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
 | **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all queries) |
 
@@ -774,20 +811,20 @@
 
 ## Important Architectural Decisions
 
-1. **Structured Error Log vs Raw Stack Traces (`docs/UI.md` § 45, `docs/Phases.md` § 19):**
-   Raw exceptions are captured in structured telemetry and sanitized for operational displays, answering the 8 operational questions rather than dumping unhandled stack traces.
-2. **Mandatory Evidence for Verification (`docs/Phases.md` § 19):**
-   Marking an error `VERIFIED` strictly enforces attached proof/evidence (test outputs, commit hashes, execution receipts).
-3. **Execution Failure Auto-Logging:**
-   When specialist agents or tasks fail in `ExecutionService`, an authoritative `ErrorRecord` is immediately registered with `HIGH` severity and linked to the task, project, and executing agent.
-4. **Tenant-Safe Lifecycle Operations:**
-   Every error read, assignment, transition, resolution, and verification requires membership verification against `company_id`.
+1. **Git is the Source of Truth (`docs/Memory.md` § 61, `docs/Phases.md` § 20):**
+   Our platform never duplicates Git object stores or attempts to replace Git. We track operational metadata connecting `Task → Agent → File → Branch → Commit → PR → Verification`.
+2. **Deterministic Multi-Tenant Scoping:**
+   Both `TaskEngineeringContext` and `TaskFileChange` enforce explicit `company_id` foreign keys and verification to prevent cross-company leakage.
+3. **Automated Verification Transitions:**
+   Setting `verification_state = "VERIFIED"` or `"REJECTED"` captures the deciding operator's identity (`verified_by_user_id` / `verified_by_agent_id`) and timestamp (`verified_at`), logging auditable system events.
+4. **Resilient Session Flush Lifecycles:**
+   Application services immediately re-fetch database records following `ActivityService.record_event` to prevent async SQLite expired attribute errors (`MissingGreenlet`).
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 16 — Verification Guardrails**
+**Phase 17 — Verification Guardrails**
 *(Awaiting user authorization before proceeding).*
 
 

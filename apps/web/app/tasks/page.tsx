@@ -29,6 +29,11 @@ import {
   Cpu,
   FileCode,
   LayoutGrid,
+  Code2,
+  GitCommit,
+  GitPullRequest,
+  FileDiff,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -42,6 +47,12 @@ import {
   DelegationRecord,
   ExecutionRecord,
   TaskExecuteRequest,
+  EngineeringTaskView,
+  TaskEngineeringContext,
+  TaskFileChange,
+  TestStatus,
+  VerificationState,
+  FileChangeType,
 } from "@/lib/api";
 import { ShellLayout } from "@/components/shell/ShellLayout";
 
@@ -122,6 +133,37 @@ export default function TasksPage() {
   const [expandedExecutionId, setExpandedExecutionId] = useState<string | null>(null);
   const [maxStepsInput, setMaxStepsInput] = useState<number>(5);
   const [maxDurationInput, setMaxDurationInput] = useState<number>(60);
+
+  // Engineering File Tracking (Phase 16)
+  const [engineeringView, setEngineeringView] = useState<EngineeringTaskView | null>(null);
+  const [loadingEngineering, setLoadingEngineering] = useState(false);
+  const [showRecordFileModal, setShowRecordFileModal] = useState(false);
+  const [showEditContextModal, setShowEditContextModal] = useState(false);
+  const [recordingFile, setRecordingFile] = useState(false);
+  const [updatingContext, setUpdatingContext] = useState(false);
+  const [expandedFileId, setExpandedFileId] = useState<string | null>(null);
+
+  // Record File Form State
+  const [rfFilePath, setRfFilePath] = useState("");
+  const [rfBranch, setRfBranch] = useState("");
+  const [rfRepo, setRfRepo] = useState("");
+  const [rfChangeType, setRfChangeType] = useState<FileChangeType>("MODIFIED");
+  const [rfCommitHash, setRfCommitHash] = useState("");
+  const [rfCommitMsg, setRfCommitMsg] = useState("");
+  const [rfAdditions, setRfAdditions] = useState<number>(10);
+  const [rfDeletions, setRfDeletions] = useState<number>(2);
+  const [rfSummary, setRfSummary] = useState("");
+
+  // Edit Context Form State
+  const [ecBranch, setEcBranch] = useState("");
+  const [ecRepo, setEcRepo] = useState("");
+  const [ecPrNum, setEcPrNum] = useState("");
+  const [ecPrUrl, setEcPrUrl] = useState("");
+  const [ecPrTitle, setEcPrTitle] = useState("");
+  const [ecTestStatus, setEcTestStatus] = useState<TestStatus>("PENDING");
+  const [ecTestSummary, setEcTestSummary] = useState("");
+  const [ecVerification, setEcVerification] = useState<VerificationState>("PENDING");
+  const [ecVerificationNotes, setEcVerificationNotes] = useState("");
 
   // Load Companies
   useEffect(() => {
@@ -277,10 +319,45 @@ export default function TasksPage() {
     [activeCompany]
   );
 
+  const loadEngineeringView = useCallback(
+    async (taskId: string) => {
+      if (!activeCompany) return;
+      setLoadingEngineering(true);
+      try {
+        const view = await api.getTaskEngineeringView(activeCompany.id, taskId);
+        setEngineeringView(view);
+        if (view.context) {
+          setEcBranch(view.context.branch);
+          setEcRepo(view.context.repository);
+          setEcPrNum(view.context.pull_request_number || "");
+          setEcPrUrl(view.context.pull_request_url || "");
+          setEcPrTitle(view.context.pull_request_title || "");
+          setEcTestStatus(view.context.test_status as TestStatus);
+          setEcTestSummary(view.context.test_output_summary || "");
+          setEcVerification(view.context.verification_state as VerificationState);
+          setEcVerificationNotes(view.context.verification_notes || "");
+          setRfBranch(view.context.branch);
+          setRfRepo(view.context.repository);
+        } else {
+          setRfBranch("main");
+          setRfRepo("main");
+          setEcBranch("main");
+          setEcRepo("main");
+        }
+      } catch (err) {
+        console.error("Failed to load engineering view:", err);
+      } finally {
+        setLoadingEngineering(false);
+      }
+    },
+    [activeCompany]
+  );
+
   useEffect(() => {
     if (selectedTask) {
       loadTaskDelegations(selectedTask.id);
       loadTaskExecutions(selectedTask.id);
+      loadEngineeringView(selectedTask.id);
     } else {
       setTaskDelegations([]);
       setTaskExecutions([]);
@@ -289,8 +366,83 @@ export default function TasksPage() {
       setShowDelegateForm(false);
       setDelegateTargetAgentId("");
       setDelegateReason("");
+      setEngineeringView(null);
+      setShowRecordFileModal(false);
+      setShowEditContextModal(false);
     }
-  }, [selectedTask, loadTaskDelegations, loadTaskExecutions]);
+  }, [selectedTask, loadTaskDelegations, loadTaskExecutions, loadEngineeringView]);
+
+  async function handleRecordFileChange(e: React.FormEvent) {
+    e.preventDefault();
+    if (!activeCompany || !selectedTask || !rfFilePath.trim()) return;
+    setRecordingFile(true);
+    try {
+      await api.recordTaskFileChanges(activeCompany.id, selectedTask.id, [
+        {
+          file_path: rfFilePath.trim(),
+          repository: rfRepo.trim() || "main",
+          branch: rfBranch.trim() || "main",
+          change_type: rfChangeType,
+          commit_hash: rfCommitHash.trim() || undefined,
+          commit_message: rfCommitMsg.trim() || undefined,
+          additions: Number(rfAdditions) || 0,
+          deletions: Number(rfDeletions) || 0,
+          change_summary: rfSummary.trim() || undefined,
+        },
+      ]);
+      await loadEngineeringView(selectedTask.id);
+      setRfFilePath("");
+      setRfCommitHash("");
+      setRfCommitMsg("");
+      setRfSummary("");
+      setShowRecordFileModal(false);
+    } catch (err: unknown) {
+      console.error("Failed to record file change:", err);
+    } finally {
+      setRecordingFile(false);
+    }
+  }
+
+  async function handleUpdateEngineeringContext(e: React.FormEvent) {
+    e.preventDefault();
+    if (!activeCompany || !selectedTask) return;
+    setUpdatingContext(true);
+    try {
+      await api.upsertEngineeringContext(activeCompany.id, selectedTask.id, {
+        branch: ecBranch.trim() || undefined,
+        repository: ecRepo.trim() || undefined,
+        pull_request_number: ecPrNum.trim() || undefined,
+        pull_request_url: ecPrUrl.trim() || undefined,
+        pull_request_title: ecPrTitle.trim() || undefined,
+        test_status: ecTestStatus,
+        test_output_summary: ecTestSummary.trim() || undefined,
+        verification_state: ecVerification,
+        verification_notes: ecVerificationNotes.trim() || undefined,
+      });
+      await loadEngineeringView(selectedTask.id);
+      setShowEditContextModal(false);
+    } catch (err: unknown) {
+      console.error("Failed to update context:", err);
+    } finally {
+      setUpdatingContext(false);
+    }
+  }
+
+  async function handleQuickVerify(state: VerificationState) {
+    if (!activeCompany || !selectedTask) return;
+    try {
+      await api.upsertEngineeringContext(activeCompany.id, selectedTask.id, {
+        verification_state: state,
+        verification_notes:
+          state === "VERIFIED"
+            ? "Code review passed and verified by operator."
+            : "Verification rejected. Revision requested.",
+      });
+      await loadEngineeringView(selectedTask.id);
+    } catch (err: unknown) {
+      console.error("Failed to update verification state:", err);
+    }
+  }
 
   // Handle Agent Runtime Execution (Phase 8)
   async function handleExecuteTask(taskId: string, customLimits?: TaskExecuteRequest) {
@@ -1280,6 +1432,262 @@ export default function TasksPage() {
                   </div>
                 )}
 
+                {/* Engineering & Code Tracking (Phase 16 - docs/Phases.md § 20 & docs/Memory.md § 61) */}
+                <div className="p-4 bg-zinc-950/80 rounded-xl border border-zinc-800 space-y-4 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                        <Code2 className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
+                          Engineering &amp; Code
+                          <span className="text-[10px] font-mono font-normal px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                            Phase 16
+                          </span>
+                        </h4>
+                        <span className="text-[11px] text-zinc-500">
+                          Operational Git context, PR links &amp; changed files
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setShowRecordFileModal(true)}
+                        className="px-2.5 py-1 text-xs bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-400 border border-cyan-500/20 font-medium rounded-lg inline-flex items-center gap-1 transition-all"
+                        title="Record code changes"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Log Change
+                      </button>
+                      <button
+                        onClick={() => setShowEditContextModal(true)}
+                        className="px-2.5 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium rounded-lg inline-flex items-center gap-1 transition-all"
+                        title="Configure Git branch, PR, or test state"
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                        Config
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingEngineering ? (
+                    <div className="py-6 flex items-center justify-center gap-2 text-xs text-zinc-500">
+                      <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+                      Loading engineering context...
+                    </div>
+                  ) : (
+                    <>
+                      {/* Context Metadata Cards */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {/* Branch & Commits */}
+                        <div className="p-2.5 bg-zinc-900/60 rounded-lg border border-zinc-800/80 space-y-1">
+                          <span className="text-[10px] uppercase font-semibold text-zinc-500 block">
+                            Branch &amp; Commits
+                          </span>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-cyan-300 font-medium inline-flex items-center gap-1 truncate max-w-[150px]">
+                              <GitBranch className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                              {engineeringView?.context?.branch || "main"}
+                            </span>
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
+                              {engineeringView?.context?.commit_count || 0} commits
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Pull Request */}
+                        <div className="p-2.5 bg-zinc-900/60 rounded-lg border border-zinc-800/80 space-y-1">
+                          <span className="text-[10px] uppercase font-semibold text-zinc-500 block">
+                            Pull Request
+                          </span>
+                          {engineeringView?.context?.pull_request_number ? (
+                            <a
+                              href={engineeringView.context.pull_request_url || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono text-purple-300 hover:text-purple-200 font-medium inline-flex items-center gap-1 truncate max-w-[170px]"
+                            >
+                              <GitPullRequest className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                              #{engineeringView.context.pull_request_number}
+                              <ExternalLink className="h-3 w-3 opacity-70" />
+                            </a>
+                          ) : (
+                            <span className="text-zinc-500 italic text-[11px]">No PR linked</span>
+                          )}
+                        </div>
+
+                        {/* Automated Test Status */}
+                        <div className="p-2.5 bg-zinc-900/60 rounded-lg border border-zinc-800/80 space-y-1">
+                          <span className="text-[10px] uppercase font-semibold text-zinc-500 block">
+                            Test Status
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {engineeringView?.context?.test_status === "PASSED" ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                Passed
+                              </span>
+                            ) : engineeringView?.context?.test_status === "FAILED" ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-400">
+                                <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                                Failed
+                              </span>
+                            ) : engineeringView?.context?.test_status === "RUNNING" ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400">
+                                <Loader2 className="h-3.5 w-3.5 text-amber-400 animate-spin" />
+                                Running
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
+                                <Clock className="h-3.5 w-3.5 text-zinc-500" />
+                                {engineeringView?.context?.test_status || "Pending"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Verification State */}
+                        <div className="p-2.5 bg-zinc-900/60 rounded-lg border border-zinc-800/80 space-y-1">
+                          <span className="text-[10px] uppercase font-semibold text-zinc-500 block">
+                            Verification State
+                          </span>
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`text-[11px] font-semibold inline-flex items-center gap-1 ${
+                                engineeringView?.context?.verification_state === "VERIFIED"
+                                  ? "text-emerald-400"
+                                  : engineeringView?.context?.verification_state === "REJECTED"
+                                  ? "text-rose-400"
+                                  : engineeringView?.context?.verification_state === "IN_REVIEW"
+                                  ? "text-blue-400"
+                                  : "text-zinc-400"
+                              }`}
+                            >
+                              {engineeringView?.context?.verification_state === "VERIFIED" && (
+                                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                              )}
+                              {engineeringView?.context?.verification_state || "Pending"}
+                            </span>
+
+                            {/* Quick Verify buttons */}
+                            <div className="flex items-center gap-1">
+                              {engineeringView?.context?.verification_state !== "VERIFIED" && (
+                                <button
+                                  onClick={() => handleQuickVerify("VERIFIED")}
+                                  className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-medium"
+                                  title="Approve and mark verified"
+                                >
+                                  Verify
+                                </button>
+                              )}
+                              {engineeringView?.context?.verification_state !== "REJECTED" && (
+                                <button
+                                  onClick={() => handleQuickVerify("REJECTED")}
+                                  className="px-1.5 py-0.5 text-[10px] rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-medium"
+                                  title="Reject code changes"
+                                >
+                                  Reject
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Changed Files List */}
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
+                            <FileDiff className="h-3.5 w-3.5 text-cyan-400" />
+                            Tracked Files ({engineeringView?.total_files_changed || 0})
+                          </span>
+                          <span className="text-[11px] font-mono">
+                            <span className="text-emerald-400 font-medium">
+                              +{engineeringView?.total_additions || 0}
+                            </span>{" "}
+                            /{" "}
+                            <span className="text-rose-400 font-medium">
+                              -{engineeringView?.total_deletions || 0}
+                            </span>
+                          </span>
+                        </div>
+
+                        {engineeringView?.file_changes && engineeringView.file_changes.length > 0 ? (
+                          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                            {engineeringView.file_changes.map((fc) => {
+                              const isExpanded = expandedFileId === fc.id;
+                              return (
+                                <div
+                                  key={fc.id}
+                                  onClick={() => setExpandedFileId(isExpanded ? null : fc.id)}
+                                  className="p-2.5 bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/80 rounded-lg text-xs cursor-pointer transition-colors space-y-1.5"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span
+                                        className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded ${
+                                          fc.change_type === "ADDED"
+                                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                            : fc.change_type === "DELETED"
+                                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                            : fc.change_type === "RENAMED"
+                                            ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                                            : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                        }`}
+                                      >
+                                        {fc.change_type}
+                                      </span>
+                                      <span className="font-mono text-zinc-200 truncate font-medium">
+                                        {fc.file_path}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className="font-mono text-[11px] text-zinc-400">
+                                        <span className="text-emerald-400 font-semibold">+{fc.additions}</span>{" "}
+                                        <span className="text-rose-400 font-semibold">-{fc.deletions}</span>
+                                      </span>
+                                      <ChevronRight
+                                        className={`h-3.5 w-3.5 text-zinc-500 transition-transform ${
+                                          isExpanded ? "rotate-90" : ""
+                                        }`}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {isExpanded && (
+                                    <div className="pt-2 border-t border-zinc-800/60 text-[11px] space-y-1 text-zinc-400 font-sans">
+                                      <div className="flex items-center justify-between text-zinc-500 font-mono text-[10px]">
+                                        <span>Author: {fc.agent_name}</span>
+                                        {fc.commit_hash && <span>Commit: {fc.commit_hash.slice(0, 7)}</span>}
+                                      </div>
+                                      {fc.commit_message && (
+                                        <p className="text-zinc-300 font-mono text-[10px]">
+                                          &gt; {fc.commit_message}
+                                        </p>
+                                      )}
+                                      {fc.change_summary && (
+                                        <p className="text-zinc-400 italic bg-zinc-950/80 p-2 rounded border border-zinc-800/50">
+                                          {fc.change_summary}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="py-4 text-center text-xs text-zinc-500 italic bg-zinc-900/30 rounded-lg border border-zinc-800/50">
+                            No files logged for this task yet. Click &quot;Log Change&quot; to record code changes.
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 {/* Prerequisites & Dependencies */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
@@ -1529,6 +1937,317 @@ export default function TasksPage() {
                   >
                     {createSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                     Create Task
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Record File Change Modal (Phase 16) */}
+        {showRecordFileModal && selectedTask && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in p-4">
+            <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h3 className="text-base font-bold text-zinc-100 flex items-center gap-2">
+                  <FileDiff className="h-5 w-5 text-cyan-400" />
+                  Log Code File Change
+                </h3>
+                <button
+                  onClick={() => setShowRecordFileModal(false)}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleRecordFileChange} className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                    File Path *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. apps/web/app/tasks/page.tsx"
+                    value={rfFilePath}
+                    onChange={(e) => setRfFilePath(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Change Type
+                    </label>
+                    <select
+                      value={rfChangeType}
+                      onChange={(e) => setRfChangeType(e.target.value as FileChangeType)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    >
+                      <option value="MODIFIED">MODIFIED</option>
+                      <option value="ADDED">ADDED</option>
+                      <option value="DELETED">DELETED</option>
+                      <option value="RENAMED">RENAMED</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Branch
+                    </label>
+                    <input
+                      type="text"
+                      value={rfBranch}
+                      onChange={(e) => setRfBranch(e.target.value)}
+                      placeholder="main"
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Lines Added (+)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={rfAdditions}
+                      onChange={(e) => setRfAdditions(parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-emerald-400 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Lines Deleted (-)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={rfDeletions}
+                      onChange={(e) => setRfDeletions(parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-rose-400 font-mono focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Commit Hash (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 7f8a9b2"
+                      value={rfCommitHash}
+                      onChange={(e) => setRfCommitHash(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Commit Message (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="feat: implement tracking drawer"
+                      value={rfCommitMsg}
+                      onChange={(e) => setRfCommitMsg(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                    Diff / Change Summary
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Short description of changes, refactors, or fixes..."
+                    value={rfSummary}
+                    onChange={(e) => setRfSummary(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div className="pt-3 flex justify-end gap-3 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowRecordFileModal(false)}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={recordingFile || !rfFilePath.trim()}
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg inline-flex items-center gap-2"
+                  >
+                    {recordingFile && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save File Change
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Engineering Context Modal (Phase 16) */}
+        {showEditContextModal && selectedTask && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in p-4">
+            <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h3 className="text-base font-bold text-zinc-100 flex items-center gap-2">
+                  <SlidersHorizontal className="h-5 w-5 text-indigo-400" />
+                  Configure Git &amp; Verification Context
+                </h3>
+                <button
+                  onClick={() => setShowEditContextModal(false)}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateEngineeringContext} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Git Branch
+                    </label>
+                    <input
+                      type="text"
+                      value={ecBranch}
+                      onChange={(e) => setEcBranch(e.target.value)}
+                      placeholder="feat/feature-name"
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Repository
+                    </label>
+                    <input
+                      type="text"
+                      value={ecRepo}
+                      onChange={(e) => setEcRepo(e.target.value)}
+                      placeholder="org/repo"
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      PR Number
+                    </label>
+                    <input
+                      type="text"
+                      value={ecPrNum}
+                      onChange={(e) => setEcPrNum(e.target.value)}
+                      placeholder="e.g. 42"
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      PR URL
+                    </label>
+                    <input
+                      type="url"
+                      value={ecPrUrl}
+                      onChange={(e) => setEcPrUrl(e.target.value)}
+                      placeholder="https://github.com/..."
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Test Status
+                    </label>
+                    <select
+                      value={ecTestStatus}
+                      onChange={(e) => setEcTestStatus(e.target.value as TestStatus)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="PENDING">PENDING</option>
+                      <option value="RUNNING">RUNNING</option>
+                      <option value="PASSED">PASSED</option>
+                      <option value="FAILED">FAILED</option>
+                      <option value="SKIPPED">SKIPPED</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                      Verification State
+                    </label>
+                    <select
+                      value={ecVerification}
+                      onChange={(e) => setEcVerification(e.target.value as VerificationState)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="PENDING">PENDING</option>
+                      <option value="IN_REVIEW">IN_REVIEW</option>
+                      <option value="VERIFIED">VERIFIED</option>
+                      <option value="REJECTED">REJECTED</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                    Test Output Summary
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={ecTestSummary}
+                    onChange={(e) => setEcTestSummary(e.target.value)}
+                    placeholder="e.g. 187/187 tests passed, 0 failures, 100% coverage..."
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+                    Verification Notes
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={ecVerificationNotes}
+                    onChange={(e) => setEcVerificationNotes(e.target.value)}
+                    placeholder="e.g. Reviewed architecture diffs and confirmed test evidence..."
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="pt-3 flex justify-end gap-3 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditContextModal(false)}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updatingContext}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg inline-flex items-center gap-2"
+                  >
+                    {updatingContext && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save Context
                   </button>
                 </div>
               </form>
