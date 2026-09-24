@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 17 — Real-Time Operations** (COMPLETE)
+**Phase 19 — Advanced Company Knowledge** (COMPLETE)
 
 ---
 
@@ -874,21 +874,70 @@
     - Slide-out Document Preview Drawer with version lineage switcher, pre-wrap content viewer, JSON metadata inspector, copy, and download actions.
     - Create Artifact modal and Create New Version modal.
 
+### Phase 19 — Advanced Company Knowledge (COMPLETE)
+* **Authoritative Multi-Tenant Schema & Database Migrations (`docs/Phases.md` § 23, `docs/Memory.md` §§ 31–39):**
+  - Added `CompanyKnowledge` model to `infrastructure/database/models.py` with multi-tenant cascade foreign keys to `Company`, plus optional relationships to `Project`, `Task`, `CompanyDecision`, and `Artifact`.
+  - Added `metadata` JSON column mapped via `knowledge_metadata` to avoid SQLAlchemy internal attribute collisions with zero schema drift.
+  - Added multi-column composite indexes: `(company_id, category)`, `(company_id, project_id)`, and `(company_id, created_at)`.
+  - Generated and executed Alembic migration `0017_create_knowledge.py` on PostgreSQL 16. Verified zero schema drift with `alembic check`.
+* **Domain Layer (`domain/knowledge/`):**
+  - `exceptions.py`: `KnowledgeError`, `KnowledgeNotFoundError`, `KnowledgeAccessDeniedError`, `InvalidKnowledgeOperationError`.
+  - `schemas.py`: Canonical `KnowledgeCategory` (`STRATEGY`, `RESEARCH`, `POLICY`, `DECISION_RATIONALE`, `PROCEDURE`, `MEETING_NOTE`, `HISTORICAL_RESULT`, `GENERAL`), `KnowledgeSourceType`, `KnowledgeConfidence`, `KnowledgeCreatePayload`, `KnowledgeUpdatePayload`, `KnowledgeResponse`, `KnowledgeListResponse`, `KnowledgeQueryRequest`, `KnowledgeQueryCitation`, `KnowledgeQueryResponse`, `SelectiveContextRequest`, `SelectiveContextResponse`.
+  - `__init__.py`: Exported all schemas and domain exceptions.
+* **Application Services (`application/services/knowledge_service.py`):**
+  - Implemented `KnowledgeService`:
+    - `create_knowledge_item`: Multi-tenant validation, linked entity resolution, activity logging (`knowledge.created`).
+    - `get_knowledge_item`: ID lookup with strict tenant access boundary check.
+    - `list_knowledge_items`: Search and filtering by category, project, and pagination.
+    - `update_knowledge_item`: Partial updates with relationship validation and activity logging (`knowledge.updated`).
+    - `delete_knowledge_item`: Deletion with activity logging (`knowledge.deleted`).
+    - `query_knowledge`: Grounded Q&A engine directly addressing the 5 Section 23 canonical questions:
+      1. *Why did we make this decision?*
+      2. *What research supports it?*
+      3. *What happened last time?*
+      4. *Which projects depend on this decision?*
+      5. *Which documents contain relevant information?*
+    - `get_selective_context`: Synthesizes bounded context packets (decisions, knowledge, artifacts, past executions) fulfilling the Section 23 acceptance criteria (*"Agents can retrieve relevant historical company context without loading the entire database"*).
+  - Updated `SystemService`: `CURRENT_PHASE = "Phase 19 — Advanced Company Knowledge"`.
+* **API Layer (`apps/api/routes/knowledge.py`):**
+  - Mounted `/api/v1/companies/{company_id}/knowledge` endpoints:
+    - `POST /`: Create knowledge record (201 Created).
+    - `GET /`: List knowledge records with category, project, search filters and pagination.
+    - `POST /query`: Grounded Q&A endpoint with citations and related precedents.
+    - `POST /context`: Selective bounded context retrieval endpoint.
+    - `GET /{item_id}`: Retrieve knowledge record.
+    - `PUT /{item_id}`: Update knowledge record.
+    - `DELETE /{item_id}`: Delete knowledge record (204 No Content).
+  - Registered `knowledge_router` in `apps/api/main.py`.
+* **Frontend Layer (`apps/web/`):**
+  - `apps/web/lib/api.ts`: Added Knowledge types and client methods (`getCompanyKnowledge`, `getKnowledgeItem`, `createKnowledgeItem`, `updateKnowledgeItem`, `deleteKnowledgeItem`, `queryCompanyKnowledge`, `getSelectiveContext`).
+  - `apps/web/lib/api.test.ts`: Added unit tests for knowledge API methods (53/53 Vitest tests passed).
+  - `apps/web/components/shell/Sidebar.tsx`: Added `/knowledge` navigation item with `Phase 19` badge, updated Phase Boundary Widget to `Phase 19 Active: Advanced Knowledge`.
+  - `apps/web/app/knowledge/page.tsx`:
+    - Executive KPI cards: Total Knowledge Records, High-Confidence Precedents, Strategies & Policies, Research & Results.
+    - Interactive "Ask Company Knowledge" grounding engine answering the 5 canonical Section 23 questions with quick prompt chips.
+    - Grounded Q&A result display with canonical topic badge, citations pills with confidence levels, and linked decisions/artifacts.
+    - Agent Selective Context Synthesizer modal for operators to inspect and copy bounded context bundles.
+    - Category filter tabs, project filter dropdown, search input.
+    - Knowledge item card grid with category chips, confidence badges, source provenance, tags, and authors.
+    - Slide-out Detailed Inspection Drawer with content reader, metadata viewer, and edit/delete actions.
+    - Create / Edit Knowledge modal supporting all canonical fields.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (206 passed in 25.07s) |
-| **Artifact Service & API Tests** | `pytest tests/unit/test_artifact_service.py tests/integration/test_api_artifacts.py` | **PASSED** (11 tests in 2.08s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 231 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (231 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (223 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (51 tests in 2 files in 303ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (214 passed in 25.91s) |
+| **Knowledge Service & API Tests** | `pytest tests/unit/test_knowledge_service.py tests/integration/test_api_knowledge.py` | **PASSED** (8 tests in 1.37s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 240 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (240 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (232 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (53 tests in 2 files in 294ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
-| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (17 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0016` applied on PostgreSQL) |
+| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (18 routes compiled, static generation verified) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0017` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
 | **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all queries) |
 
@@ -896,19 +945,20 @@
 
 ## Important Architectural Decisions
 
-1. **Database Remains Authoritative (`docs/Memory.md` § 31):**
-   PostgreSQL stores all artifact metadata, version lineage, and direct inline text content, avoiding external storage dependencies for markdown, code, and JSON deliverables.
-2. **Self-Referential Version Lineage:**
-   `parent_artifact_id` links incremented versions back to the root document, enabling clean version trees and history querying without duplicate tables.
-3. **Attribution & Audit Trails:**
-   Every artifact creation and version publish automatically captures creator attribution (Agent or User) and records an immutable activity event in `ActivityService`.
+1. **Selective Context Retrieval (`docs/Phases.md` § 23):**
+   Agents never load the entire company database into context. `KnowledgeService.get_selective_context` dynamically retrieves bounded subsets (top relevant decisions, knowledge records, recent artifacts, execution precedents) tailored to intent keywords and project scope.
+2. **Canonical Question Grounding:**
+   The knowledge inquiry engine explicitly resolves the 5 Section 23 questions, outputting typed `citations` linking directly to authoritative `DECISION`, `KNOWLEDGE`, `ARTIFACT`, or `EXECUTION` source entities.
+3. **Database Metadata Column Collision Resolution:**
+   Mapped the database column `"metadata"` to Python attribute `knowledge_metadata` on the ORM model while using Pydantic `AliasChoices("metadata", "knowledge_metadata")` for bidirectional API compatibility with zero schema drift.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 19 — Finance & Budgets**
+**Phase 20 — Semantic / Vector Memory**
 *(Awaiting user authorization before proceeding).*
+
 
 
 

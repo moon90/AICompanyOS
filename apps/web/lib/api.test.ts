@@ -1899,6 +1899,175 @@ describe("Web API Client", () => {
     expect(versions[1].version).toBe(2);
   });
 
+  it("manages company knowledge lifecycle: create, list, get, update, delete", async () => {
+    const mockKnowledge = {
+      id: "kn-1",
+      company_id: "comp-1",
+      project_id: "proj-1",
+      task_id: "task-1",
+      decision_id: "dec-1",
+      artifact_id: "art-1",
+      title: "Vector Architecture Rationale",
+      category: "STRATEGY",
+      content: "Adopt pgvector for 10M embeddings with HNSW indexing.",
+      source_type: "RESEARCH",
+      source_uri: "https://pgvector.org",
+      author_name: "Lead Architect",
+      confidence: "HIGH",
+      tags: ["database", "ai"],
+      metadata: { latency: "28ms" },
+      created_at: "2026-09-24T00:00:00Z",
+      updated_at: "2026-09-24T00:00:00Z",
+    };
+
+    // createKnowledgeItem
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockKnowledge,
+    } as Response);
+
+    const created = await api.createKnowledgeItem("comp-1", {
+      title: "Vector Architecture Rationale",
+      category: "STRATEGY",
+      content: "Adopt pgvector for 10M embeddings with HNSW indexing.",
+      project_id: "proj-1",
+    });
+    expect(created.id).toBe("kn-1");
+    expect(created.category).toBe("STRATEGY");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/knowledge",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // getCompanyKnowledge
+    const mockList = {
+      items: [mockKnowledge],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockList,
+    } as Response);
+
+    const list = await api.getCompanyKnowledge("comp-1", {
+      category: "STRATEGY",
+      search: "pgvector",
+    });
+    expect(list.total).toBe(1);
+    expect(list.items[0].title).toBe("Vector Architecture Rationale");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/knowledge?category=STRATEGY&search=pgvector",
+      expect.anything()
+    );
+
+    // getKnowledgeItem
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockKnowledge,
+    } as Response);
+
+    const fetched = await api.getKnowledgeItem("comp-1", "kn-1");
+    expect(fetched.id).toBe("kn-1");
+
+    // updateKnowledgeItem
+    const updatedMock = { ...mockKnowledge, title: "Updated Vector Strategy" };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => updatedMock,
+    } as Response);
+
+    const updated = await api.updateKnowledgeItem("comp-1", "kn-1", {
+      title: "Updated Vector Strategy",
+    });
+    expect(updated.title).toBe("Updated Vector Strategy");
+
+    // deleteKnowledgeItem
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: async () => ({}),
+    } as Response);
+
+    await api.deleteKnowledgeItem("comp-1", "kn-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/knowledge/kn-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("queries company knowledge and retrieves selective context", async () => {
+    // queryCompanyKnowledge
+    const mockQueryResponse = {
+      question: "Why did we make this decision?",
+      answer: "We adopted pgvector because of lower operational complexity.",
+      canonical_topic: "Why did we make this decision?",
+      citations: [
+        {
+          source_type: "DECISION",
+          source_id: "dec-1",
+          title: "Vector DB Selection",
+          reference: "Decision 'Vector DB Selection'",
+          confidence: "HIGH",
+        },
+      ],
+      related_decisions: [{ id: "dec-1", title: "Vector DB Selection" }],
+      related_artifacts: [],
+      timestamp: "2026-09-24T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockQueryResponse,
+    } as Response);
+
+    const queryRes = await api.queryCompanyKnowledge(
+      "comp-1",
+      "Why did we make this decision?"
+    );
+    expect(queryRes.canonical_topic).toBe("Why did we make this decision?");
+    expect(queryRes.citations).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/knowledge/query",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // getSelectiveContext
+    const mockContextResponse = {
+      company_id: "comp-1",
+      project: { id: "proj-1", name: "Vector Engine" },
+      task: { id: "task-1", title: "Benchmark" },
+      relevant_decisions: [{ id: "dec-1", title: "Vector DB Selection" }],
+      relevant_knowledge: [],
+      relevant_artifacts: [],
+      historical_results_summary: [],
+      synthesized_context: "### Selective Company Knowledge\n- pgvector selected",
+      item_count: 1,
+      timestamp: "2026-09-24T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockContextResponse,
+    } as Response);
+
+    const ctxRes = await api.getSelectiveContext("comp-1", {
+      project_id: "proj-1",
+      intent_keywords: ["pgvector"],
+      max_items: 5,
+    });
+    expect(ctxRes.company_id).toBe("comp-1");
+    expect(ctxRes.project?.name).toBe("Vector Engine");
+    expect(ctxRes.synthesized_context).toContain("### Selective Company Knowledge");
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

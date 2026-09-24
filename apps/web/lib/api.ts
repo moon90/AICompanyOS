@@ -1839,6 +1839,110 @@ export const api = {
       }
     );
   },
+
+  async getCompanyKnowledge(
+    companyId: string,
+    filters?: {
+      category?: string;
+      project_id?: string;
+      decision_id?: string;
+      search?: string;
+      page?: number;
+      page_size?: number;
+    }
+  ): Promise<KnowledgeListResponse> {
+    const query = new URLSearchParams();
+    if (filters?.category) query.set("category", filters.category);
+    if (filters?.project_id) query.set("project_id", filters.project_id);
+    if (filters?.decision_id) query.set("decision_id", filters.decision_id);
+    if (filters?.search) query.set("search", filters.search);
+    if (filters?.page) query.set("page", filters.page.toString());
+    if (filters?.page_size) query.set("page_size", filters.page_size.toString());
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return request<KnowledgeListResponse>(
+      `/api/v1/companies/${companyId}/knowledge${qs}`
+    );
+  },
+
+  async getKnowledgeItem(
+    companyId: string,
+    itemId: string
+  ): Promise<KnowledgeItem> {
+    return request<KnowledgeItem>(
+      `/api/v1/companies/${companyId}/knowledge/${itemId}`
+    );
+  },
+
+  async createKnowledgeItem(
+    companyId: string,
+    data: KnowledgeCreatePayload
+  ): Promise<KnowledgeItem> {
+    return request<KnowledgeItem>(
+      `/api/v1/companies/${companyId}/knowledge`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async updateKnowledgeItem(
+    companyId: string,
+    itemId: string,
+    data: KnowledgeUpdatePayload
+  ): Promise<KnowledgeItem> {
+    return request<KnowledgeItem>(
+      `/api/v1/companies/${companyId}/knowledge/${itemId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async deleteKnowledgeItem(
+    companyId: string,
+    itemId: string
+  ): Promise<void> {
+    return request<void>(
+      `/api/v1/companies/${companyId}/knowledge/${itemId}`,
+      {
+        method: "DELETE",
+      }
+    );
+  },
+
+  async queryCompanyKnowledge(
+    companyId: string,
+    question: string,
+    projectId?: string
+  ): Promise<KnowledgeQueryResponse> {
+    return request<KnowledgeQueryResponse>(
+      `/api/v1/companies/${companyId}/knowledge/query`,
+      {
+        method: "POST",
+        body: JSON.stringify({ question, project_id: projectId }),
+      }
+    );
+  },
+
+  async getSelectiveContext(
+    companyId: string,
+    payload: {
+      task_id?: string;
+      project_id?: string;
+      intent_keywords?: string[];
+      max_items?: number;
+    }
+  ): Promise<SelectiveContextResponse> {
+    return request<SelectiveContextResponse>(
+      `/api/v1/companies/${companyId}/knowledge/context`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -2359,4 +2463,117 @@ export interface ArtifactVersionCreatePayload {
   file_size_bytes?: number | null;
   metadata?: Record<string, unknown>;
 }
+
+export type KnowledgeCategory =
+  | "STRATEGY"
+  | "RESEARCH"
+  | "POLICY"
+  | "DECISION_RATIONALE"
+  | "PROCEDURE"
+  | "MEETING_NOTE"
+  | "HISTORICAL_RESULT"
+  | "GENERAL";
+
+export type KnowledgeSourceType =
+  | "USER"
+  | "AGENT"
+  | "DOCUMENT"
+  | "RESEARCH"
+  | "MEETING"
+  | "POST_MORTEM"
+  | "EXTERNAL"
+  | "SYSTEM";
+
+export type KnowledgeConfidence = "HIGH" | "MEDIUM" | "LOW" | "ESTIMATED";
+
+export interface KnowledgeItem {
+  id: string;
+  company_id: string;
+  project_id?: string | null;
+  task_id?: string | null;
+  decision_id?: string | null;
+  artifact_id?: string | null;
+  title: string;
+  category: KnowledgeCategory | string;
+  content: string;
+  source_type: KnowledgeSourceType | string;
+  source_uri?: string | null;
+  author_name: string;
+  confidence: KnowledgeConfidence | string;
+  tags: string[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeListResponse {
+  items: KnowledgeItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeCreatePayload {
+  title: string;
+  category?: KnowledgeCategory | string;
+  content: string;
+  project_id?: string | null;
+  task_id?: string | null;
+  decision_id?: string | null;
+  artifact_id?: string | null;
+  source_type?: KnowledgeSourceType | string;
+  source_uri?: string | null;
+  author_name?: string | null;
+  confidence?: KnowledgeConfidence | string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface KnowledgeUpdatePayload {
+  title?: string;
+  category?: KnowledgeCategory | string;
+  content?: string;
+  project_id?: string | null;
+  task_id?: string | null;
+  decision_id?: string | null;
+  artifact_id?: string | null;
+  source_type?: KnowledgeSourceType | string;
+  source_uri?: string | null;
+  author_name?: string | null;
+  confidence?: KnowledgeConfidence | string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface KnowledgeQueryCitation {
+  source_type: string;
+  source_id: string;
+  title: string;
+  reference: string;
+  confidence: string;
+}
+
+export interface KnowledgeQueryResponse {
+  question: string;
+  answer: string;
+  canonical_topic?: string | null;
+  citations: KnowledgeQueryCitation[];
+  related_decisions: Record<string, unknown>[];
+  related_artifacts: Record<string, unknown>[];
+  timestamp: string;
+}
+
+export interface SelectiveContextResponse {
+  company_id: string;
+  project?: Record<string, unknown> | null;
+  task?: Record<string, unknown> | null;
+  relevant_decisions: Record<string, unknown>[];
+  relevant_knowledge: KnowledgeItem[];
+  relevant_artifacts: Record<string, unknown>[];
+  historical_results_summary: Record<string, unknown>[];
+  synthesized_context: string;
+  item_count: number;
+  timestamp: string;
+}
+
 

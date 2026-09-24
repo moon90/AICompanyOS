@@ -18,6 +18,7 @@ from apps.api.routes.engineering import router as engineering_router
 from apps.api.routes.errors import router as errors_router
 from apps.api.routes.execution import router as execution_router
 from apps.api.routes.health import router as health_router
+from apps.api.routes.knowledge import router as knowledge_router
 from apps.api.routes.memory import router as memory_router
 from apps.api.routes.presence import router as presence_router
 from apps.api.routes.project import router as project_router
@@ -82,6 +83,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(engineering_router)
     application.include_router(realtime_router)
     application.include_router(artifacts_router)
+    application.include_router(knowledge_router)
 
     return application
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  BookOpen,
   Bot,
   Bug,
   Building2,
@@ -81,6 +82,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           icon: Users,
           phaseBadge: "Phase 14",
           isCurrent: pathname === "/agents",
+        },
+        {
+          name: "Company Knowledge",
+          href: "/knowledge",
+          icon: BookOpen,
+          phaseBadge: "Phase 19",
+          isCurrent: pathname === "/knowledge",
         },
       ],
     },
@@ -246,14 +254,14 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
       {/* Phase Boundary Widget per UI.md § 21 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Documents &amp; Artifacts</span>
+          <span className="text-slate-400 font-medium">Advanced Knowledge</span>
           <span className="inline-flex items-center gap-1 text-[10px] font-mono text-indigo-400">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-            Phase 18 Active
+            Phase 19 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Authoritative multi-tenant artifact management, version lineage &amp; rich document preview active in <strong className="text-slate-300">Phase 18</strong>.
+          Persistent research, strategies, decision rationales &amp; selective context retrieval active in <strong className="text-slate-300">Phase 19</strong>.
         </p>
       </div>
 
