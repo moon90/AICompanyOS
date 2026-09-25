@@ -285,6 +285,16 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    verification_runs: Mapped[list["VerificationRun"]] = relationship(
+        "VerificationRun",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    evaluation_benchmarks: Mapped[list["EvaluationBenchmark"]] = relationship(
+        "EvaluationBenchmark",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -2406,4 +2416,171 @@ Index(
     "ix_voice_interactions_session_created",
     VoiceInteraction.session_id,
     VoiceInteraction.created_at,
+)
+
+
+class VerificationRun(Base):
+    """Authoritative record of a verification pipeline execution adhering to docs/Phases.md Section 26 and docs/Architecture.md Section 71."""
+
+    __tablename__ = "verification_runs"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="TASK",
+        server_default="TASK",
+        index=True,
+    )
+    target_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="RUNNING",
+        server_default="RUNNING",
+        index=True,
+    )
+    overall_score: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=0.0,
+        server_default="0.0",
+    )
+    pipeline_stage: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="SCHEMA_VALIDATION",
+        server_default="SCHEMA_VALIDATION",
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="verification_runs")
+    agent: Mapped["Agent | None"] = relationship("Agent")
+    criterion_scores: Mapped[list["EvaluationCriterionScore"]] = relationship(
+        "EvaluationCriterionScore",
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="EvaluationCriterionScore.criterion",
+        lazy="selectin",
+    )
+
+
+class EvaluationCriterionScore(Base):
+    """Score and evidence for an individual evaluation criterion across the 8 canonical dimensions."""
+
+    __tablename__ = "evaluation_criterion_scores"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("verification_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    criterion: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=100.0, server_default="100.0"
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PASSED",
+        server_default="PASSED",
+    )
+    details: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+
+    # Relationships
+    run: Mapped["VerificationRun"] = relationship(
+        "VerificationRun", back_populates="criterion_scores"
+    )
+
+
+class EvaluationBenchmark(Base):
+    """Configured evaluation benchmark suite or representative task specification per docs/Phases.md Section 26."""
+
+    __tablename__ = "evaluation_benchmarks"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    task_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    target_role: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="GENERAL", server_default="GENERAL"
+    )
+    expected_output_pattern: Mapped[str | None] = mapped_column(Text, nullable=True)
+    min_passing_score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=75.0, server_default="75.0"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="evaluation_benchmarks")
+
+
+Index("ix_verification_runs_company_target", VerificationRun.company_id, VerificationRun.target_id)
+Index(
+    "ix_evaluation_benchmarks_company_cat",
+    EvaluationBenchmark.company_id,
+    EvaluationBenchmark.category,
 )

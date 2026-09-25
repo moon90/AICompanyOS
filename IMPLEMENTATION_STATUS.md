@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 21 — Voice Interface** (COMPLETE)
+**Phase 22 — Verification & AI Evaluation** (COMPLETE)
 
 ---
 
@@ -1038,13 +1038,66 @@
    Every voice command yields both a concise, human-natural `spoken_response` (engineered for low-latency SpeechSynthesis) and a structured markdown `detailed_response` (engineered for operator visibility and audit logging).
 3. **Multi-Turn State Tracking:**
    `VoiceSession.context_data` maintains conversational context (e.g. `last_topic`, `last_task_id`), enabling seamless follow-up inquiries such as "Which need attention?" following an enterprise pipeline or task status query.
+4. **Rule 17 Independent Verification Invariant (`docs/Rules.md` § 17):**
+   Never mark a task as `VERIFIED` solely because an agent returned `success = true`. All tasks and artifacts must undergo trusted application evaluation across the 5-stage pipeline, requiring a weighted composite score $\ge 80.0/100$ and zero schema violations.
+5. **Rule 146 Grounded Artifact Evidence Invariant (`docs/Rules.md` § 146):**
+   Generated artifacts, reports, and code must reference verifiable source citations, execution logs, or concrete repository diffs. Content lacking grounded citations is penalized in the `EVIDENCE_QUALITY` and `HALLUCINATION_RATE` dimensions.
+
+---
+
+### Phase 22 — Verification & AI Evaluation (COMPLETE)
+* **Authoritative Persistence & Database Migration:**
+  * Defined `VerificationRun`, `EvaluationCriterionScore`, and `EvaluationBenchmark` models in `infrastructure/database/models.py`.
+  * Added cascade relationships `verification_runs` and `evaluation_benchmarks` to `Company`.
+  * Created and applied Alembic migration `database/migrations/versions/0020_create_verification_eval.py` (`0020_create_verification_eval`, 30 chars $\le 32$ byte limit) with verified zero schema drift.
+* **Domain Layer (`domain/verification/`):**
+  * `domain/verification/exceptions.py`: `VerificationError`, `VerificationAccessDeniedError`, `VerificationNotFoundError`, `InvalidVerificationCriteriaError`, `VerificationPipelineFailureError`.
+  * `domain/verification/schemas.py`: Standardized on `StrEnum` for `CriterionType` (8 canonical dimensions), `VerificationStatus` (`RUNNING`, `PASSED`, `FAILED`, `WARNING`), `PipelineStage` (5 stages), `BenchmarkCategory` (8 categories), `CriterionScoreItem`, `VerificationRunResponse`, `VerificationRunListResponse`, `TaskVerificationRequest`, `ArtifactVerificationRequest`, `BenchmarkRunRequest`, `BenchmarkRunResponse`, `BenchmarkDefinitionResponse`, `VerificationTelemetryResponse`.
+* **Application Services (`application/services/verification_service.py`):**
+  * Implemented `VerificationService` orchestrating the 5-stage verification pipeline:
+    1. `SCHEMA_VALIDATION`: Structural validation of task/artifact properties and associations.
+    2. `EVIDENCE_CHECK`: Audit of external tool invocations (`ToolExecutionRecord`), file modifications (`TaskFileChange`), and grounded citations per Rule 146.
+    3. `TASK_VERIFICATION`: Direct inspection of execution records, return codes, and test runner outputs.
+    4. `EVALUATION`: Weighted scoring across all 8 canonical dimensions (`CORRECTNESS`, `COMPLETENESS`, `TOOL_USAGE`, `PERMISSION_COMPLIANCE`, `HALLUCINATION_RATE`, `INSTRUCTION_FOLLOWING`, `TASK_COMPLETION`, `EVIDENCE_QUALITY`).
+    5. `COMPLETED`: Rule 17 independent completion gate (requires composite score $\ge 80.0/100$ to transition to `PASSED` / `VERIFIED`).
+  * Automated seeding and execution of representative benchmark suite across the 8 canonical categories (`CEO`, `MARKETING`, `ENGINEERING`, `SALES`, `TOOL`, `APPROVAL`, `FAILURE`, `RECOVERY`).
+  * Aggregated telemetry reporting pass rates, average scores per dimension, and benchmark health.
+  * Updated `CURRENT_PHASE = "Phase 22 — Verification & AI Evaluation"` in `application/services/system_service.py`.
+* **API Layer (`apps/api/`):**
+  * `apps/api/schemas/verification.py`: Re-exports domain verification schemas.
+  * `apps/api/routes/verification.py`:
+    * `POST /api/v1/companies/{company_id}/verification/verify/task/{task_id}`
+    * `POST /api/v1/companies/{company_id}/verification/verify/artifact/{artifact_id}`
+    * `POST /api/v1/companies/{company_id}/verification/benchmarks/run`
+    * `GET /api/v1/companies/{company_id}/verification/benchmarks`
+    * `GET /api/v1/companies/{company_id}/verification/runs`
+    * `GET /api/v1/companies/{company_id}/verification/runs/{run_id}`
+    * `GET /api/v1/companies/{company_id}/verification/telemetry`
+  * Registered `verification_router` in `apps/api/main.py`.
+* **Web Layer & Executive UI (`apps/web/`):**
+  * Extended `apps/web/lib/api.ts` with Phase 22 interfaces and client methods (`verifyTask`, `verifyArtifact`, `runEvaluationBenchmark`, `listBenchmarks`, `listVerificationRuns`, `getVerificationRun`, `getVerificationTelemetry`).
+  * Added unit tests in `apps/web/lib/api.test.ts` (56/56 passing).
+  * Updated `apps/web/components/shell/Sidebar.tsx` with `ShieldCheck` icon, `/verification` route, Phase 22 badge, and updated Phase 22 Boundary Widget.
+  * Built `apps/web/app/verification/page.tsx`:
+    * 5-Stage Verification Pipeline visualization and interactive task/artifact evaluator.
+    * 8-Dimensional Quality Radar / Scorecard with min gate threshold markers.
+    * Representative Benchmark Suite runner across all 8 canonical categories.
+    * Verification Run History and audit trail with status filters and inspection drawers.
+* **Testing & Quality Assurance:**
+  * 245/245 backend unit and integration tests passing (`uv run pytest`).
+  * 56/56 frontend vitest tests passing (`npm test --prefix apps/web`).
+  * 21/21 static Next.js pages successfully generated (`npm run build --prefix apps/web`).
+  * 0 ESLint warnings or errors (`npm run lint --prefix apps/web`).
+  * 0 Ruff linter/formatter errors (`uv run ruff check`).
+  * 0 MyPy type errors across all 156 backend modules (`uv run mypy`).
+  * 0 Alembic schema drift (`uv run alembic check`).
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 22 — Verification & AI Evaluation**
-*(Awaiting user authorization before proceeding per `docs/Phases.md` § 26).*
+**Phase 23 — Security Hardening**
+*(Awaiting user authorization before proceeding per `docs/Phases.md` § 27).*
 
 
 

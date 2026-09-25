@@ -27,6 +27,7 @@ from apps.api.routes.semantic import router as semantic_router
 from apps.api.routes.system import router as system_router
 from apps.api.routes.task import router as task_router
 from apps.api.routes.tool import router as tool_router
+from apps.api.routes.verification import router as verification_router
 from apps.api.routes.voice import router as voice_router
 from infrastructure.config import Settings, get_settings
 from infrastructure.security.rate_limiter import LoginRateLimiter
@@ -88,6 +89,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(knowledge_router)
     application.include_router(semantic_router)
     application.include_router(voice_router)
+    application.include_router(verification_router)
 
     return application
 

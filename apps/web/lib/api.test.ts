@@ -2317,6 +2317,164 @@ describe("Web API Client", () => {
     expect(telemRes.avg_execution_time_ms).toBe(14.2);
   });
 
+  it("handles Phase 22 Verification and AI Evaluation endpoints", async () => {
+    // 1. verifyTask
+    const mockTaskRun = {
+      id: "vrf-001",
+      company_id: "comp-1",
+      target_type: "TASK",
+      target_id: "tsk-001",
+      status: "PASSED",
+      overall_score: 92.5,
+      pipeline_stage: "COMPLETED",
+      summary: "Task verification succeeded.",
+      criteria_scores: [
+        {
+          id: "ecs-001",
+          run_id: "vrf-001",
+          criterion: "CORRECTNESS",
+          score: 95.0,
+          status: "PASSED",
+          created_at: "2026-09-25T00:00:00Z",
+        },
+      ],
+      started_at: "2026-09-25T00:00:00Z",
+      completed_at: "2026-09-25T00:00:01Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockTaskRun,
+    } as Response);
+
+    const taskRun = await api.verifyTask("comp-1", "tsk-001");
+    expect(taskRun.id).toBe("vrf-001");
+    expect(taskRun.overall_score).toBe(92.5);
+    expect(taskRun.status).toBe("PASSED");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/verification/verify/task/tsk-001",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 2. verifyArtifact
+    const mockArtifactRun = {
+      ...mockTaskRun,
+      id: "vrf-002",
+      target_type: "ARTIFACT",
+      target_id: "art-001",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockArtifactRun,
+    } as Response);
+
+    const artifactRun = await api.verifyArtifact("comp-1", "art-001");
+    expect(artifactRun.id).toBe("vrf-002");
+    expect(artifactRun.target_type).toBe("ARTIFACT");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/verification/verify/artifact/art-001",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 3. runEvaluationBenchmark
+    const mockBenchmarkRun = {
+      benchmark_id: "bmk-001",
+      benchmark_name: "Engineering Benchmark",
+      category: "ENGINEERING",
+      passed: true,
+      verification_run: mockTaskRun,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockBenchmarkRun,
+    } as Response);
+
+    const bmkRunRes = await api.runEvaluationBenchmark("comp-1", {
+      category: "ENGINEERING",
+      prompt: "Refactor database indexing",
+    });
+    expect(bmkRunRes.passed).toBe(true);
+    expect(bmkRunRes.category).toBe("ENGINEERING");
+
+    // 4. listBenchmarks
+    const mockBenchmarks = [
+      {
+        id: "bmk-001",
+        company_id: "comp-1",
+        name: "CEO Executive Alignment",
+        category: "CEO",
+        description: "Benchmark testing CEO goal decomposition",
+        canonical_prompt: "Develop Q4 plan",
+        expected_criteria: ["CORRECTNESS", "COMPLETENESS"],
+        passing_threshold: 80.0,
+        is_active: true,
+        created_at: "2026-09-25T00:00:00Z",
+      },
+    ];
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockBenchmarks,
+    } as Response);
+
+    const bmkList = await api.listBenchmarks("comp-1", "CEO");
+    expect(bmkList).toHaveLength(1);
+    expect(bmkList[0].category).toBe("CEO");
+
+    // 5. listVerificationRuns
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [mockTaskRun], total: 1 }),
+    } as Response);
+
+    const runsList = await api.listVerificationRuns("comp-1", {
+      status: "PASSED",
+    });
+    expect(runsList.items).toHaveLength(1);
+    expect(runsList.total).toBe(1);
+
+    // 6. getVerificationRun
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockTaskRun,
+    } as Response);
+
+    const singleRun = await api.getVerificationRun("comp-1", "vrf-001");
+    expect(singleRun.id).toBe("vrf-001");
+
+    // 7. getVerificationTelemetry
+    const mockTelem = {
+      company_id: "comp-1",
+      total_runs: 10,
+      passed_runs: 9,
+      failed_runs: 1,
+      pass_rate_percent: 90.0,
+      avg_overall_score: 88.5,
+      avg_scores_by_criterion: { CORRECTNESS: 92.0, COMPLETENESS: 85.0 },
+      active_benchmarks_count: 8,
+      timestamp: "2026-09-25T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockTelem,
+    } as Response);
+
+    const vrfTelem = await api.getVerificationTelemetry("comp-1");
+    expect(vrfTelem.total_runs).toBe(10);
+    expect(vrfTelem.pass_rate_percent).toBe(90.0);
+    expect(vrfTelem.active_benchmarks_count).toBe(8);
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

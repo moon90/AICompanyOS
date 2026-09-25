@@ -19,6 +19,7 @@ import {
   Radio,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   User as UserIcon,
   Users,
@@ -180,6 +181,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           isCurrent: pathname === "/activity",
         },
         {
+          name: "AI Verification & Eval",
+          href: "/verification",
+          icon: ShieldCheck,
+          phaseBadge: "Phase 22",
+          isCurrent: pathname === "/verification",
+        },
+        {
           name: "Settings",
           href: "/settings",
           icon: Settings,
@@ -267,17 +275,17 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
         ))}
       </div>
 
-      {/* Phase Boundary Widget per UI.md § 21 */}
+      {/* Phase Boundary Widget per UI.md § 22 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Voice Interface</span>
+          <span className="text-slate-400 font-medium">Verification &amp; Eval</span>
           <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Phase 21 Active
+            Phase 22 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Real-time speech-to-text, dual natural/detailed synthesis &amp; autonomous company action routing active in <strong className="text-slate-300">Phase 21</strong>.
+          Rule 17 independent verification pipeline, 8-dimensional AI evaluation scorecard &amp; benchmark suite active in <strong className="text-slate-300">Phase 22</strong>.
         </p>
       </div>
 

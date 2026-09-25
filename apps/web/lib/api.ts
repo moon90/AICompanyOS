@@ -2057,6 +2057,97 @@ export const api = {
       `/api/v1/companies/${companyId}/voice/telemetry`
     );
   },
+
+  // Phase 22 — Verification & AI Evaluation
+  async verifyTask(
+    companyId: string,
+    taskId: string,
+    payload?: TaskVerificationPayload
+  ): Promise<VerificationRunResponse> {
+    return request<VerificationRunResponse>(
+      `/api/v1/companies/${companyId}/verification/verify/task/${taskId}`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload || {}),
+      }
+    );
+  },
+
+  async verifyArtifact(
+    companyId: string,
+    artifactId: string,
+    payload?: ArtifactVerificationPayload
+  ): Promise<VerificationRunResponse> {
+    return request<VerificationRunResponse>(
+      `/api/v1/companies/${companyId}/verification/verify/artifact/${artifactId}`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload || {}),
+      }
+    );
+  },
+
+  async runEvaluationBenchmark(
+    companyId: string,
+    payload: BenchmarkRunRequestPayload
+  ): Promise<BenchmarkRunResponse> {
+    return request<BenchmarkRunResponse>(
+      `/api/v1/companies/${companyId}/verification/benchmarks/run`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async listBenchmarks(
+    companyId: string,
+    category?: string
+  ): Promise<BenchmarkDefinitionResponse[]> {
+    const query = category ? `?category=${encodeURIComponent(category)}` : "";
+    return request<BenchmarkDefinitionResponse[]>(
+      `/api/v1/companies/${companyId}/verification/benchmarks${query}`
+    );
+  },
+
+  async listVerificationRuns(
+    companyId: string,
+    params?: {
+      target_type?: string;
+      target_id?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<VerificationRunListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.target_type) searchParams.set("target_type", params.target_type);
+    if (params?.target_id) searchParams.set("target_id", params.target_id);
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
+    if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
+    const qs = searchParams.toString();
+    return request<VerificationRunListResponse>(
+      `/api/v1/companies/${companyId}/verification/runs${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  async getVerificationRun(
+    companyId: string,
+    runId: string
+  ): Promise<VerificationRunResponse> {
+    return request<VerificationRunResponse>(
+      `/api/v1/companies/${companyId}/verification/runs/${runId}`
+    );
+  },
+
+  async getVerificationTelemetry(
+    companyId: string
+  ): Promise<VerificationTelemetryResponse> {
+    return request<VerificationTelemetryResponse>(
+      `/api/v1/companies/${companyId}/verification/telemetry`
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -2858,3 +2949,114 @@ export interface VoiceTelemetryResponse {
   last_interaction_at?: string | null;
   timestamp: string;
 }
+
+// Phase 22 — Verification & AI Evaluation Interfaces adhering to docs/Phases.md Section 26, docs/Architecture.md Sections 71-72, and docs/Rules.md Sections 17 & 146
+export type CriterionType =
+  | "CORRECTNESS"
+  | "COMPLETENESS"
+  | "TOOL_USAGE"
+  | "PERMISSION_COMPLIANCE"
+  | "HALLUCINATION_RATE"
+  | "INSTRUCTION_FOLLOWING"
+  | "TASK_COMPLETION"
+  | "EVIDENCE_QUALITY";
+
+export type VerificationStatus = "RUNNING" | "PASSED" | "FAILED" | "WARNING";
+
+export type PipelineStage =
+  | "SCHEMA_VALIDATION"
+  | "EVIDENCE_CHECK"
+  | "TASK_VERIFICATION"
+  | "EVALUATION"
+  | "COMPLETED";
+
+export type BenchmarkCategory =
+  | "CEO"
+  | "MARKETING"
+  | "ENGINEERING"
+  | "SALES"
+  | "TOOL"
+  | "APPROVAL"
+  | "FAILURE"
+  | "RECOVERY";
+
+export interface CriterionScoreItem {
+  id: string;
+  run_id: string;
+  criterion: CriterionType;
+  score: number;
+  status: VerificationStatus;
+  details?: string | null;
+  evidence?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface VerificationRunResponse {
+  id: string;
+  company_id: string;
+  target_type: "TASK" | "ARTIFACT" | "BENCHMARK" | string;
+  target_id: string;
+  agent_id?: string | null;
+  status: VerificationStatus;
+  overall_score: number;
+  pipeline_stage: PipelineStage;
+  summary?: string | null;
+  evaluation_metadata?: Record<string, unknown> | null;
+  started_at: string;
+  completed_at?: string | null;
+  criteria_scores: CriterionScoreItem[];
+}
+
+export interface VerificationRunListResponse {
+  items: VerificationRunResponse[];
+  total: number;
+}
+
+export interface TaskVerificationPayload {
+  criteria_overrides?: Record<string, unknown>;
+}
+
+export interface ArtifactVerificationPayload {
+  criteria_overrides?: Record<string, unknown>;
+}
+
+export interface BenchmarkRunRequestPayload {
+  category: BenchmarkCategory;
+  prompt: string;
+  agent_id?: string | null;
+  timeout_seconds?: number;
+}
+
+export interface BenchmarkDefinitionResponse {
+  id: string;
+  company_id: string;
+  name: string;
+  category: BenchmarkCategory;
+  description: string;
+  canonical_prompt: string;
+  expected_criteria: string[];
+  passing_threshold: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface BenchmarkRunResponse {
+  benchmark_id: string;
+  benchmark_name: string;
+  category: BenchmarkCategory;
+  verification_run: VerificationRunResponse;
+  passed: boolean;
+}
+
+export interface VerificationTelemetryResponse {
+  company_id: string;
+  total_runs: number;
+  passed_runs: number;
+  failed_runs: number;
+  pass_rate_percent: number;
+  avg_overall_score: number;
+  avg_scores_by_criterion: Record<string, number>;
+  active_benchmarks_count: number;
+  timestamp: string;
+}
+

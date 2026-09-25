@@ -12,7 +12,7 @@ from infrastructure.config import Settings, get_settings
 class SystemService:
     """Service providing live infrastructure and system foundation status."""
 
-    CURRENT_PHASE = "Phase 21 — Voice Interface"
+    CURRENT_PHASE = "Phase 22 — Verification & AI Evaluation"
 
     def __init__(self, session: AsyncSession, settings: Settings | None = None) -> None:
         self.session = session
