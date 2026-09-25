@@ -25,7 +25,7 @@ async def test_system_service_success() -> None:
     assert status.status == "operational"
     assert status.database == "connected"
     assert status.auth_authority == "postgresql_sessions"
-    assert status.current_phase == "Phase 20 — Semantic / Vector Memory"
+    assert status.current_phase == "Phase 21 — Voice Interface"
     assert status.environment == "test"
     assert status.version == "0.1.0-test"
 

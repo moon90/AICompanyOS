@@ -275,6 +275,16 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    voice_sessions: Mapped[list["VoiceSession"]] = relationship(
+        "VoiceSession",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    voice_interactions: Mapped[list["VoiceInteraction"]] = relationship(
+        "VoiceInteraction",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class CompanyMember(Base):
@@ -2257,4 +2267,143 @@ Index(
     VectorEmbedding.embedding,
     postgresql_using="hnsw",
     postgresql_ops={"embedding": "vector_cosine_ops"},
+)
+
+
+class VoiceSession(Base):
+    """Conversational voice control session adhering to docs/Phases.md Section 25."""
+
+    __tablename__ = "voice_sessions"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="Voice Session",
+        server_default="Voice Session",
+    )
+    state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="IDLE",
+        server_default="IDLE",
+        index=True,
+    )
+    context_data: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="voice_sessions")
+    user: Mapped["User"] = relationship("User")
+    interactions: Mapped[list["VoiceInteraction"]] = relationship(
+        "VoiceInteraction",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="VoiceInteraction.created_at",
+        lazy="selectin",
+    )
+
+
+class VoiceInteraction(Base):
+    """Individual voice conversation turn and action execution record adhering to docs/Phases.md Section 25."""
+
+    __tablename__ = "voice_interactions"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("voice_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    transcript: Mapped[str] = mapped_column(Text, nullable=False)
+    intent: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="GENERAL_INQUIRY",
+        server_default="GENERAL_INQUIRY",
+        index=True,
+    )
+    action_taken: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    action_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    action_success: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+    spoken_response: Mapped[str] = mapped_column(Text, nullable=False)
+    detailed_response: Mapped[str] = mapped_column(Text, nullable=False)
+    execution_time_ms: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=0.0,
+        server_default="0.0",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationships
+    session: Mapped["VoiceSession"] = relationship("VoiceSession", back_populates="interactions")
+    company: Mapped["Company"] = relationship("Company", back_populates="voice_interactions")
+    user: Mapped["User"] = relationship("User")
+
+
+Index("ix_voice_sessions_company_user", VoiceSession.company_id, VoiceSession.user_id)
+Index(
+    "ix_voice_interactions_session_created",
+    VoiceInteraction.session_id,
+    VoiceInteraction.created_at,
 )

@@ -15,6 +15,7 @@ import {
   FolderGit2,
   LayoutDashboard,
   LogOut,
+  Mic,
   Radio,
   Settings,
   ShieldAlert,
@@ -97,6 +98,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           icon: Sparkles,
           phaseBadge: "Phase 20",
           isCurrent: pathname === "/semantic",
+        },
+        {
+          name: "Voice Console",
+          href: "/voice",
+          icon: Mic,
+          phaseBadge: "Phase 21",
+          isCurrent: pathname === "/voice",
         },
       ],
     },
@@ -262,14 +270,14 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
       {/* Phase Boundary Widget per UI.md § 21 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Vector Memory</span>
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
-            Phase 20 Active
+          <span className="text-slate-400 font-medium">Voice Interface</span>
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Phase 21 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Dense 768-dim embeddings, pgvector HNSW indexing &amp; semantic context retrieval active in <strong className="text-slate-300">Phase 20</strong>.
+          Real-time speech-to-text, dual natural/detailed synthesis &amp; autonomous company action routing active in <strong className="text-slate-300">Phase 21</strong>.
         </p>
       </div>
 

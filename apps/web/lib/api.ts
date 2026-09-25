@@ -1991,6 +1991,72 @@ export const api = {
       `/api/v1/companies/${companyId}/semantic/stats`
     );
   },
+
+  // Phase 21 — Voice Interface
+  async createVoiceSession(
+    companyId: string,
+    payload?: VoiceSessionCreatePayload
+  ): Promise<VoiceSessionResponse> {
+    return request<VoiceSessionResponse>(
+      `/api/v1/companies/${companyId}/voice/sessions`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload || {}),
+      }
+    );
+  },
+
+  async listVoiceSessions(
+    companyId: string,
+    limit: number = 20
+  ): Promise<VoiceSessionListResponse> {
+    return request<VoiceSessionListResponse>(
+      `/api/v1/companies/${companyId}/voice/sessions?limit=${limit}`
+    );
+  },
+
+  async getVoiceSession(
+    companyId: string,
+    sessionId: string
+  ): Promise<VoiceSessionResponse> {
+    return request<VoiceSessionResponse>(
+      `/api/v1/companies/${companyId}/voice/sessions/${sessionId}`
+    );
+  },
+
+  async sendVoiceCommand(
+    companyId: string,
+    payload: VoiceCommandPayload
+  ): Promise<VoiceCommandResponse> {
+    return request<VoiceCommandResponse>(
+      `/api/v1/companies/${companyId}/voice/command`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async synthesizeVoiceSpeech(
+    companyId: string,
+    payload: VoiceSynthesizeRequest
+  ): Promise<VoiceSynthesizeResponse> {
+    return request<VoiceSynthesizeResponse>(
+      `/api/v1/companies/${companyId}/voice/synthesize`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async getVoiceTelemetry(
+    companyId: string
+  ): Promise<VoiceTelemetryResponse> {
+    return request<VoiceTelemetryResponse>(
+      `/api/v1/companies/${companyId}/voice/telemetry`
+    );
+  },
 };
 
 export type PresenceStatus =
@@ -2691,5 +2757,104 @@ export interface BatchIndexResponse {
   skipped_count: number;
   total_chunks: number;
   duration_ms: number;
+  timestamp: string;
+}
+
+// Phase 21 — Voice Interface Interfaces adhering to docs/Phases.md Section 25 and docs/Memory.md Section 60
+export type VoiceState =
+  | "LISTENING"
+  | "PROCESSING"
+  | "PLANNING"
+  | "EXECUTING"
+  | "WAITING_FOR_APPROVAL"
+  | "SPEAKING"
+  | "IDLE";
+
+export type VoiceIntent =
+  | "STATUS_QUERY"
+  | "TASK_CREATE"
+  | "TASK_CONTROL"
+  | "APPROVAL_DECISION"
+  | "DELEGATION_COMMAND"
+  | "GENERAL_INQUIRY";
+
+export interface VoiceInteractionItem {
+  id: string;
+  session_id: string;
+  company_id: string;
+  user_id: string;
+  transcript: string;
+  intent: VoiceIntent;
+  action_taken?: string | null;
+  action_entity_id?: string | null;
+  action_success: boolean;
+  spoken_response: string;
+  detailed_response: string;
+  execution_time_ms: number;
+  created_at: string;
+}
+
+export interface VoiceSessionResponse {
+  id: string;
+  company_id: string;
+  user_id: string;
+  title: string;
+  state: VoiceState;
+  context_data: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  interactions: VoiceInteractionItem[];
+}
+
+export interface VoiceSessionListResponse {
+  items: VoiceSessionResponse[];
+  total: number;
+}
+
+export interface VoiceSessionCreatePayload {
+  title?: string;
+  initial_context?: Record<string, unknown>;
+}
+
+export interface VoiceCommandPayload {
+  transcript: string;
+  session_id?: string | null;
+  context_task_id?: string | null;
+  project_id?: string | null;
+}
+
+export interface VoiceCommandResponse {
+  session_id: string;
+  transcript: string;
+  intent: VoiceIntent;
+  state: VoiceState;
+  spoken_response: string;
+  detailed_response: string;
+  action_taken?: string | null;
+  action_entity_id?: string | null;
+  action_success: boolean;
+  execution_time_ms: number;
+  timestamp: string;
+}
+
+export interface VoiceSynthesizeRequest {
+  text: string;
+  voice_id?: string;
+}
+
+export interface VoiceSynthesizeResponse {
+  text: string;
+  audio_format: string;
+  audio_b64?: string | null;
+  phonemes?: string | null;
+}
+
+export interface VoiceTelemetryResponse {
+  company_id: string;
+  total_sessions: number;
+  total_interactions: number;
+  intent_distribution: Record<string, number>;
+  avg_execution_time_ms: number;
+  last_interaction_at?: string | null;
   timestamp: string;
 }

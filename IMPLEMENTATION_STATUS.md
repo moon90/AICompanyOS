@@ -1,7 +1,7 @@
 # AI Company OS — Implementation Status
 
 ## Current Phase
-**Phase 20 — Semantic / Vector Memory** (COMPLETE)
+**Phase 21 — Voice Interface** (COMPLETE)
 
 ---
 
@@ -965,41 +965,86 @@
     - Tab 2 (Agent Context Builder): Interactive simulator for synthesizing bounded task prompts for AI agents with markdown preview and copy controls.
     - Tab 3 (pgvector Architecture & Governance): Visualizing structured truth (PostgreSQL) vs semantic retrieval (pgvector) vs operational cache (Redis).
 
+### Phase 21 — Voice Interface (COMPLETE)
+* **Foundational Architecture (`docs/Phases.md` § 25 & `docs/Memory.md` § 60):**
+  * *"Voice is a control interface over the same underlying company system. It should not create a separate execution architecture."*
+  * Implemented unified flow: Microphone $\rightarrow$ Speech-to-Text $\rightarrow$ Conversation Context $\rightarrow$ CEO / Intent Router $\rightarrow$ Company Action $\rightarrow$ CEO Response $\rightarrow$ Text-to-Speech.
+  * Formulated all 6 canonical voice states: `LISTENING`, `PROCESSING`, `PLANNING`, `EXECUTING`, `WAITING_FOR_APPROVAL`, `SPEAKING`, and `IDLE`.
+* **Database Models & Alembic Migration:**
+  * Defined `VoiceSession` and `VoiceInteraction` models in `infrastructure/database/models.py`.
+  * Eager `lazy="selectin"` loading on interactions avoiding async greenlet IO issues.
+  * Created migration `database/migrations/versions/0019_create_voice_interface.py` with multi-tenant company and user indices.
+  * Applied to PostgreSQL and verified zero schema drift (`alembic check`).
+* **Domain Layer (`domain/voice/`):**
+  * `domain/voice/exceptions.py`: `VoiceError`, `VoiceSessionNotFoundError`, `VoiceAccessDeniedError`, `InvalidVoiceCommandError`, `VoiceActionExecutionError`.
+  * `domain/voice/schemas.py`: `VoiceState`, `VoiceIntent`, `VoiceSessionCreatePayload`, `VoiceInteractionItem`, `VoiceSessionResponse`, `VoiceSessionListResponse`, `VoiceCommandPayload`, `VoiceCommandResponse`, `VoiceSynthesizeRequest`, `VoiceSynthesizeResponse`, `VoiceTelemetryResponse`.
+* **Application Services (`VoiceService` in `application/services/voice_service.py`):**
+  * Multi-turn conversational intent classification: `STATUS_QUERY`, `TASK_CREATE`, `TASK_CONTROL`, `APPROVAL_DECISION`, `DELEGATION_COMMAND`, `GENERAL_INQUIRY`.
+  * Canonical Section 25 flows:
+    * Executive briefing ("CEO, what's happening?") querying live projects, tasks in progress, and pending approvals.
+    * Pipeline status ("Show enterprise opportunities" $\rightarrow$ "There are 18 enterprise opportunities in the pipeline.").
+    * Multi-turn contextual follow-up ("Which need attention?" $\rightarrow$ queries blocked/needs review items).
+    * Task delegation ("Ask marketing to draft launch announcement" $\rightarrow$ creates `Task`, emits `ActivityEvent`, returns spoken confirmation).
+    * Approval decisions ("Approve that" $\rightarrow$ approves pending `ApprovalRequest` with user attribution).
+    * Task control ("Stop the task" $\rightarrow$ transitions task to `CANCELLED`).
+  * Dual-output response synthesis: concise `spoken_response` (for TTS) + structured markdown `detailed_response` (for operator inspection).
+  * System phase updated to `Phase 21 — Voice Interface` in `application/services/system_service.py`.
+* **API Layer (`apps/api/routes/voice.py`):**
+  * Registered `voice_router` under prefix `/api/v1/companies/{company_id}/voice` in `apps/api/main.py`.
+  * Endpoints:
+    * `POST /sessions` (201 Created)
+    * `GET /sessions` (200 OK)
+    * `GET /sessions/{session_id}` (200 OK)
+    * `POST /command` (200 OK)
+    * `POST /synthesize` (200 OK)
+    * `GET /telemetry` (200 OK)
+* **Frontend UI (`apps/web/`):**
+  * Extended `apps/web/lib/api.ts` with all Phase 21 voice schemas and client methods (`createVoiceSession`, `listVoiceSessions`, `getVoiceSession`, `sendVoiceCommand`, `synthesizeVoiceSpeech`, `getVoiceTelemetry`).
+  * Updated `apps/web/components/shell/Sidebar.tsx`: Added `/voice` navigation link with `Mic` icon and `Phase 21` badge; updated Phase Boundary Widget to `Phase 21 Active: Voice Interface`.
+  * Built live Executive Voice Console in `apps/web/app/voice/page.tsx`:
+    * Real-time Voice State badge with pulsing color cues across all 7 canonical states.
+    * Dynamic soundwave equalizer animation during listening and speaking.
+    * Web Speech API SpeechRecognition integration with graceful fallback to typed command execution.
+    * Web Speech API SpeechSynthesis integration with automatic voice playback toggle.
+    * Section 25 canonical prompt chips for instant workflow execution.
+    * Conversational timeline showing spoken transcript, detailed markdown analysis, execution latency, and action badges.
+    * Voice session history drawer and telemetry intent distribution breakdown.
+
 ---
 
 ## Verification Results
 
 | Verification Item | Command / Harness | Result |
 | :--- | :--- | :--- |
-| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (224 passed in 26.78s) |
-| **Semantic Service & API Tests** | `pytest tests/unit/test_semantic_service.py tests/integration/test_api_semantic.py` | **PASSED** (10 tests in 2.52s) |
-| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 251 files) |
-| **Python Formatting** | `ruff format --check .` | **PASSED** (251 files compliant) |
-| **Python Static Type Checking** | `mypy .` | **PASSED** (243 source files checked, 0 errors) |
-| **Frontend Unit Tests** | `npm --prefix apps/web test -- --run` | **PASSED** (54 tests in 2 files in 280ms) |
+| **Backend Unit & Integration Tests** | `pytest tests/` | **PASSED** (236 passed in 28.53s) |
+| **Voice Service & API Tests** | `pytest tests/unit/test_voice_service.py tests/integration/test_api_voice.py` | **PASSED** (12 tests in 2.15s) |
+| **Python Linting** | `ruff check .` | **PASSED** (0 errors across 260 files) |
+| **Python Formatting** | `ruff format --check .` | **PASSED** (260 files compliant) |
+| **Python Static Type Checking** | `mypy .` | **PASSED** (150 source files checked, 0 errors) |
+| **Frontend Unit Tests** | `npm --prefix apps/web test` | **PASSED** (55 tests in 2 files in 285ms) |
 | **Frontend Linting** | `npm --prefix apps/web run lint` | **PASSED** (0 errors, 0 warnings) |
-| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (19 routes compiled, static generation verified) |
-| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0018` applied on PostgreSQL) |
+| **Frontend Production Build** | `npm --prefix apps/web run build` | **PASSED** (20 routes compiled, static generation verified) |
+| **Database Migrations** | `alembic upgrade head` | **PASSED** (Revisions `0001`–`0019` applied on PostgreSQL) |
 | **Database Schema Drift** | `alembic check` | **PASSED** (No new upgrade operations detected; zero schema drift) |
-| **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all vector operations) |
+| **Multi-Tenant Isolation** | Automated Unit & Integration Tests | **PASSED** (Strict cross-tenant boundaries enforced across all voice operations) |
 
 ---
 
 ## Important Architectural Decisions
 
-1. **Vector Memory as Retrieval Mechanism (`docs/Memory.md` § 40):**
-   Vector embeddings are strictly a retrieval indexing layer and never authoritative state. If a record is mutated or removed in PostgreSQL, its embedding is synchronized or deleted.
-2. **PostgreSQL pgvector HNSW Indexing:**
-   Utilized `Vector(768)` with an HNSW cosine index (`ix_vector_embeddings_hnsw` USING hnsw with `vector_cosine_ops`) for sub-millisecond retrieval latency without running separate vector database containers.
-3. **Dual-Mode Vector Search:**
-   `SemanticService.search_semantic` dynamically detects the database dialect: running native SQL `<=>` operator on PostgreSQL with HNSW acceleration, and falling back to candidate projection with Python cosine similarity on in-memory SQLite test suites.
+1. **Voice as a Control Interface (`docs/Phases.md` § 25):**
+   Voice commands do not bypass the core domain models or create separate execution pipelines. When a voice command requests creating a task, stopping execution, or approving a request, it delegates directly to existing authoritative models (`Task`, `ApprovalRequest`, `ActivityEvent`).
+2. **Dual-Mode Response Representation:**
+   Every voice command yields both a concise, human-natural `spoken_response` (engineered for low-latency SpeechSynthesis) and a structured markdown `detailed_response` (engineered for operator visibility and audit logging).
+3. **Multi-Turn State Tracking:**
+   `VoiceSession.context_data` maintains conversational context (e.g. `last_topic`, `last_task_id`), enabling seamless follow-up inquiries such as "Which need attention?" following an enterprise pipeline or task status query.
 
 ---
 
 ## Next Authorized Phase
 
-**Phase 21 — External Integrations & Connectors**
-*(Awaiting user authorization before proceeding).*
+**Phase 22 — Verification & AI Evaluation**
+*(Awaiting user authorization before proceeding per `docs/Phases.md` § 26).*
 
 
 

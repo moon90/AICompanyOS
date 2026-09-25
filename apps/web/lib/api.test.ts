@@ -2192,6 +2192,131 @@ describe("Web API Client", () => {
     );
   });
 
+  it("handles Phase 21 Voice Interface operations", async () => {
+    // 1. createVoiceSession
+    const mockSession = {
+      id: "vcs-12345",
+      company_id: "comp-1",
+      user_id: "user-1",
+      title: "Voice Standup",
+      state: "IDLE",
+      context_data: {},
+      created_at: "2026-09-25T00:00:00Z",
+      updated_at: "2026-09-25T00:00:00Z",
+      interactions: [],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => mockSession,
+    } as Response);
+
+    const session = await api.createVoiceSession("comp-1", {
+      title: "Voice Standup",
+    });
+    expect(session.id).toBe("vcs-12345");
+    expect(session.state).toBe("IDLE");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/companies/comp-1/voice/sessions",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    // 2. listVoiceSessions
+    const mockList = {
+      items: [mockSession],
+      total: 1,
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockList,
+    } as Response);
+
+    const listRes = await api.listVoiceSessions("comp-1", 10);
+    expect(listRes.total).toBe(1);
+    expect(listRes.items[0].id).toBe("vcs-12345");
+
+    // 3. getVoiceSession
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockSession,
+    } as Response);
+
+    const detail = await api.getVoiceSession("comp-1", "vcs-12345");
+    expect(detail.id).toBe("vcs-12345");
+
+    // 4. sendVoiceCommand
+    const mockCommandResponse = {
+      session_id: "vcs-12345",
+      transcript: "CEO, what's happening?",
+      intent: "STATUS_QUERY",
+      state: "SPEAKING",
+      spoken_response: "The company has 3 active projects.",
+      detailed_response: "### Status Report",
+      action_taken: "FETCH_EXECUTIVE_BRIEFING",
+      action_entity_id: null,
+      action_success: true,
+      execution_time_ms: 12.5,
+      timestamp: "2026-09-25T00:00:00Z",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockCommandResponse,
+    } as Response);
+
+    const cmdRes = await api.sendVoiceCommand("comp-1", {
+      transcript: "CEO, what's happening?",
+      session_id: "vcs-12345",
+    });
+    expect(cmdRes.intent).toBe("STATUS_QUERY");
+    expect(cmdRes.state).toBe("SPEAKING");
+    expect(cmdRes.spoken_response).toContain("active projects");
+
+    // 5. synthesizeVoiceSpeech
+    const mockSynth = {
+      text: "System is ready.",
+      audio_format: "browser-tts/pcm",
+      audio_b64: null,
+      phonemes: null,
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockSynth,
+    } as Response);
+
+    const synthRes = await api.synthesizeVoiceSpeech("comp-1", {
+      text: "System is ready.",
+    });
+    expect(synthRes.text).toBe("System is ready.");
+    expect(synthRes.audio_format).toBe("browser-tts/pcm");
+
+    // 6. getVoiceTelemetry
+    const mockTelem = {
+      company_id: "comp-1",
+      total_sessions: 4,
+      total_interactions: 12,
+      intent_distribution: { STATUS_QUERY: 8, TASK_CREATE: 4 },
+      avg_execution_time_ms: 14.2,
+      last_interaction_at: "2026-09-25T00:00:00Z",
+      timestamp: "2026-09-25T00:00:00Z",
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockTelem,
+    } as Response);
+
+    const telemRes = await api.getVoiceTelemetry("comp-1");
+    expect(telemRes.total_sessions).toBe(4);
+    expect(telemRes.total_interactions).toBe(12);
+    expect(telemRes.avg_execution_time_ms).toBe(14.2);
+  });
+
   it("throws ApiError when response is not ok", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
