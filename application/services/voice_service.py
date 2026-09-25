@@ -204,76 +204,606 @@ class VoiceService:
         lower = text.lower().strip()
 
         # 1. Approval Decisions
-        if any(
-            w in lower
-            for w in [
-                "approve that",
-                "approve this",
-                "grant approval",
-                "approve request",
-                "confirm approval",
-            ]
-        ):
+        approval_keywords = [
+            "approve that",
+            "approve this",
+            "grant approval",
+            "approve request",
+            "confirm approval",
+            # Bengali
+            "অনুমোদন করো",
+            "অনুমোদন করুন",
+            "মঞ্জুর করো",
+            # Spanish
+            "aprobar esto",
+            "aprueba esto",
+            "aprobar solicitud",
+            "conceder aprobación",
+            # French
+            "approuver ceci",
+            "accorder l'approbation",
+            "valider la demande",
+            # German
+            "genehmigen",
+            "bestätigen",
+            # Hindi
+            "मंजूर करो",
+            "स्वीकृत करो",
+            # Arabic
+            "وافق على",
+            "الموافقة",
+            # Chinese
+            "批准",
+            "同意",
+            # Japanese
+            "承認する",
+            "承認",
+        ]
+        if any(w in lower for w in approval_keywords):
             return VoiceIntent.APPROVAL_DECISION
-        if any(
-            w in lower for w in ["reject that", "reject this", "deny request", "decline approval"]
-        ):
+
+        reject_keywords = [
+            "reject that",
+            "reject this",
+            "deny request",
+            "decline approval",
+            # Bengali
+            "বাতিল করো",
+            "প্রত্যাখ্যান করো",
+            # Spanish
+            "rechazar esto",
+            "denegar solicitud",
+            # French
+            "rejeter ceci",
+            "refuser la demande",
+            # German
+            "ablehnen",
+            # Hindi
+            "अस्वीकार करो",
+            "खारिज करो",
+            # Arabic
+            "ارفض",
+            "رفض",
+            # Chinese
+            "拒绝",
+            "驳回",
+            # Japanese
+            "却下する",
+            "拒否",
+        ]
+        if any(w in lower for w in reject_keywords):
             return VoiceIntent.APPROVAL_DECISION
 
         # 2. Task Control
-        if any(
-            w in lower
-            for w in [
-                "stop the task",
-                "stop task",
-                "cancel the task",
-                "pause the task",
-                "halt task",
-            ]
-        ):
+        task_control_keywords = [
+            "stop the task",
+            "stop task",
+            "cancel the task",
+            "pause the task",
+            "halt task",
+            # Bengali
+            "কাজ থামাও",
+            "কাজ বন্ধ করো",
+            # Spanish
+            "detener tarea",
+            "parar tarea",
+            "cancelar tarea",
+            # French
+            "arrêter la tâche",
+            "stopper la tâche",
+            # German
+            "aufgabe stoppen",
+            "aufgabe anhalten",
+            # Hindi
+            "टास्क रोको",
+            "कार्य बंद करो",
+            # Arabic
+            "أوقف المهمة",
+            "إيقاف المهمة",
+            # Chinese
+            "停止任务",
+            "暂停任务",
+            # Japanese
+            "タスクを停止",
+            "タスク停止",
+        ]
+        if any(w in lower for w in task_control_keywords):
             return VoiceIntent.TASK_CONTROL
 
         # 3. Delegation & Direct Agent Assignments
-        if any(lower.startswith(p) for p in ["ask ", "tell ", "assign ", "delegate "]):
+        delegation_prefixes = [
+            "ask ",
+            "tell ",
+            "assign ",
+            "delegate ",
+            # Bengali
+            "বলো ",
+            "বলুন ",
+            # Spanish
+            "pide a ",
+            "dile a ",
+            "asigna a ",
+            # French
+            "demande à ",
+            "dis à ",
+            "assigne à ",
+            # German
+            "frage ",
+            "sage ",
+            # Hindi
+            "पूछो ",
+            "कहो ",
+            # Arabic
+            "اسأل ",
+            "قل لـ ",
+            # Chinese
+            "让 ",
+            "请 ",
+        ]
+        if any(lower.startswith(p) for p in delegation_prefixes) or any(
+            w in lower for w in ["に頼む", "に伝えて"]
+        ):
             return VoiceIntent.DELEGATION_COMMAND
 
         # 4. Task Creation
-        if any(
-            p in lower
-            for p in ["create task", "create a task", "new task", "schedule task", "plan task"]
-        ):
+        task_creation_keywords = [
+            "create task",
+            "create a task",
+            "new task",
+            "schedule task",
+            "plan task",
+            # Bengali
+            "নতুন কাজ",
+            "কাজ তৈরি করো",
+            "টাস্ক তৈরি",
+            # Spanish
+            "crear tarea",
+            "nueva tarea",
+            # French
+            "créer une tâche",
+            "nouvelle tâche",
+            # German
+            "aufgabe erstellen",
+            "neue aufgabe",
+            # Hindi
+            "नया कार्य",
+            "टास्क बनाओ",
+            # Arabic
+            "إنشاء مهمة",
+            "مهمة جديدة",
+            # Chinese
+            "创建任务",
+            "新建任务",
+            # Japanese
+            "タスク作成",
+            "新しいタスク",
+        ]
+        if any(p in lower for p in task_creation_keywords):
             return VoiceIntent.TASK_CREATE
 
         # 5. Status & Attention Inquiries
-        if any(
-            p in lower
-            for p in [
-                "what's happening",
-                "whats happening",
-                "how are sales",
-                "how are tasks",
-                "show me blocked",
-                "blocked tasks",
-                "which need attention",
-                "needs attention",
-                "overview",
-                "company status",
-                "briefing",
-                "give me a briefing",
-                "opportunities",
-                "pipeline",
-                "show enterprise",
-            ]
-        ):
+        status_keywords = [
+            "what's happening",
+            "whats happening",
+            "how are sales",
+            "how are tasks",
+            "show me blocked",
+            "blocked tasks",
+            "which need attention",
+            "needs attention",
+            "overview",
+            "company status",
+            "briefing",
+            "give me a briefing",
+            "opportunities",
+            "pipeline",
+            "show enterprise",
+            # Bengali
+            "কী খবর",
+            "কাজের অবস্থা",
+            "কোম্পানির অবস্থা",
+            "সামগ্রিক অবস্থা",
+            "কোন কাজ আটকে আছে",
+            "ব্রিফিং দাও",
+            # Spanish
+            "qué está pasando",
+            "cómo van las ventas",
+            "estado de la empresa",
+            "tareas bloqueadas",
+            "resumen",
+            # French
+            "que se passe-t-il",
+            "comment vont les ventes",
+            "état de l'entreprise",
+            "tâches bloquées",
+            "résumé",
+            # German
+            "was passiert",
+            "wie läuft es",
+            "unternehmensstatus",
+            "blockierte aufgaben",
+            "übersicht",
+            # Hindi
+            "क्या हो रहा है",
+            "कंपनी की स्थिति",
+            "रुके हुए कार्य",
+            "संक्षिप्त विवरण",
+            # Arabic
+            "ماذا يحدث",
+            "حالة الشركة",
+            "المهام المعلقة",
+            "ملخص عام",
+            # Chinese
+            "进展如何",
+            "公司状态",
+            "受阻任务",
+            "简报",
+            "概况",
+            # Japanese
+            "何が起きていますか",
+            "会社の状況",
+            "ブロックされたタスク",
+            "概要",
+            "ブリーフィング",
+        ]
+        if any(p in lower for p in status_keywords):
             return VoiceIntent.STATUS_QUERY
 
         # 6. Follow-up Context Check
         if context.get("last_topic") in ("opportunities", "tasks") and (
-            "which" in lower or "attention" in lower
+            "which" in lower
+            or "attention" in lower
+            or "কোন" in lower
+            or "cuál" in lower
+            or "quel" in lower
+            or "welche" in lower
         ):
             return VoiceIntent.STATUS_QUERY
 
         return VoiceIntent.GENERAL_INQUIRY
+
+    def _localize_response(
+        self,
+        spoken_response: str,
+        detailed_response: str,
+        intent: VoiceIntent,
+        language: str | None,
+        meta: dict[str, Any],
+    ) -> tuple[str, str]:
+        """Localize spoken and detailed responses according to target ISO/BCP 47 language code."""
+        if not language:
+            return spoken_response, detailed_response
+
+        code = language.lower().split("-")[0]
+        if code in ("en", ""):
+            return spoken_response, detailed_response
+
+        if code == "bn":  # Bengali
+            if intent == VoiceIntent.STATUS_QUERY:
+                qtype = meta.get("type")
+                if qtype == "attention":
+                    cnt = meta.get("count", 0)
+                    if cnt == 0:
+                        return (
+                            "সকল কাজ সুচারুভাবে চলছে, কোনো অবরুদ্ধ কাজ নেই।",
+                            "### কাজের পর্যালোচনা\n- **অবরুদ্ধ / সংকটপূর্ণ কাজ**: ০\n- সমস্ত ওয়ার্কফ্লো সুস্থ।",
+                        )
+                    names = meta.get("names", "")
+                    return (
+                        f"{cnt}টি কাজের প্রতি দৃষ্টি আকর্ষণ প্রয়োজন, বিশেষ করে {names}।",
+                        f"### দৃষ্টি আকর্ষণ প্রয়োজন এমন কাজ ({cnt})\n" + meta.get("items_md", ""),
+                    )
+                elif qtype == "sales":
+                    return (
+                        "বিক্রয় বিভাগে ৪টি সুযোগ সক্রিয় রয়েছে এবং ২টিতে অবিলম্বে ফলো-আপ প্রয়োজন।",
+                        "### বিক্রয় কর্মক্ষমতা\n- সক্রিয় সুযোগ: ৪\n- জরুরি মনোযোগ প্রয়োজন: ২\n- টার্গেট মার্কেট: EMEA ও উত্তর আমেরিকা",
+                    )
+                elif qtype == "opportunities":
+                    return (
+                        "পাইপলাইনে ১৮টি এন্টারপ্রাইজ সুযোগ বিদ্যমান রয়েছে।",
+                        "### এন্টারপ্রাইজ পাইপলাইন\n- মোট সুযোগ: ১৮\n- সক্রিয় ভ্যালু: $৪.২M\n- পর্যায়: আবিষ্কার (৮), মূল্যায়ন (৬), সংগ্রহ (৪)",
+                    )
+                else:
+                    pc = meta.get("proj_cnt", 0)
+                    ip = meta.get("in_prog", 0)
+                    pa = meta.get("pending_appr", 0)
+                    tc = meta.get("tsk_cnt", 0)
+                    return (
+                        f"কোম্পানিতে {pc}টি সক্রিয় প্রকল্প এবং {ip}টি চলমান কাজ রয়েছে। {pa}টি অনুমোদন পর্যালোচনার জন্য অপেক্ষমাণ।",
+                        f"### নির্বাহী ব্রিফিং\n- **সক্রিয় প্রকল্প**: {pc}\n- **মোট কাজ**: {tc} ({ip}টি চলমান)\n- **অপেক্ষমাণ অনুমোদন**: {pa}",
+                    )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                tid = meta.get("task_id", "")
+                title = meta.get("title", "")
+                role = meta.get("target_role", "সাধারণ এজেন্ট")
+                return (
+                    "কাজটি সফলভাবে তৈরি এবং অর্পণ করা হয়েছে।",
+                    f"### ভয়েসের মাধ্যমে তৈরি টাস্ক\n- **আইডি**: `{tid}`\n- **শিরোনাম**: {title}\n- **দায়িত্বপ্রাপ্ত ভূমিকা**: {role}\n- **অবস্থা**: PLANNED",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                if meta.get("has_appr"):
+                    word = "অনুমোদিত" if meta.get("is_approve") else "প্রত্যাখ্যাত"
+                    act = meta.get("action_type", "কাজের অনুরোধ")
+                    aid = meta.get("appr_id", "")
+                    return (
+                        f"{act}-এর অনুমোদনের অনুরোধটি {word} করা হয়েছে।",
+                        f"### অনুমোদন সিদ্ধান্ত\n- **অনুমোদন আইডি**: `{aid}`\n- **অ্যাকশন**: {act}\n- **অবস্থা**: {word.upper()}",
+                    )
+                return (
+                    "আপনার সিদ্ধান্তের জন্য কোনো অপেক্ষমাণ অনুমোদন নেই।",
+                    "### অনুমোদন\nএই কোম্পানিতে কোনো অপেক্ষমাণ অনুমোদন পাওয়া যায়নি।",
+                )
+            elif intent == VoiceIntent.TASK_CONTROL:
+                if meta.get("has_task"):
+                    tt = meta.get("task_title", "")
+                    tid = meta.get("task_id", "")
+                    return (
+                        f"'{tt}' কাজটি বন্ধ করা হয়েছে।",
+                        f"### কাজ বন্ধ\n- **আইডি**: `{tid}`\n- **শিরোনাম**: {tt}\n- **নতুন অবস্থা**: CANCELLED",
+                    )
+                return (
+                    "বন্ধ করার জন্য কোনো সক্রিয় কাজ পাওয়া যায়নি।",
+                    "বন্ধ করার মতো কোনো চলমান কাজ পাওয়া যায়নি।",
+                )
+            else:
+                tr = meta.get("transcript", "")
+                kt = meta.get("kn_title")
+                if kt:
+                    return (
+                        f"'{tr}' সম্পর্কে আমাদের প্রাতিষ্ঠানিক নীতি '{kt}' নথিতে বর্ণিত হয়েছে।",
+                        f"### জ্ঞানকোষ রেফারেন্স\n**অনুসন্ধান**: {tr}\n\n**নথি**: {kt}\n{meta.get('kn_content', '')[:300]}...",
+                    )
+                return (
+                    f"আমি আপনার প্রশ্ন '{tr}' পেয়েছি। কোম্পানির সার্বিক কার্যক্রম স্বাভাবিকভাবে চলছে।",
+                    f"### নির্বাহী উত্তর\nভয়েস অনুসন্ধান: *'{tr}'*\nঅবস্থা: সফলভাবে কার্যরত।",
+                )
+
+        elif code == "es":  # Spanish
+            if intent == VoiceIntent.STATUS_QUERY:
+                qtype = meta.get("type")
+                if qtype == "attention":
+                    cnt = meta.get("count", 0)
+                    if cnt == 0:
+                        return (
+                            "Todas las tareas avanzan sin problemas, no hay elementos bloqueados.",
+                            "### Resumen de Atención\n- **Tareas Bloqueadas / Críticas**: 0\n- Todos los flujos de trabajo saludables.",
+                        )
+                    names = meta.get("names", "")
+                    return (
+                        f"{cnt} tareas requieren atención, incluyendo {names}.",
+                        f"### Tareas que Requieren Atención ({cnt})\n" + meta.get("items_md", ""),
+                    )
+                elif qtype == "sales":
+                    return (
+                        "Ventas tiene 4 oportunidades en curso con 2 que requieren seguimiento inmediato.",
+                        "### Rendimiento de Ventas\n- Oportunidades Activas: 4\n- Requieren Atención: 2\n- Mercado Objetivo: EMEA y Norteamérica",
+                    )
+                elif qtype == "opportunities":
+                    return (
+                        "Hay 18 oportunidades empresariales en el pipeline.",
+                        "### Pipeline Empresarial\n- Total de Oportunidades: 18\n- Valor Activo: $4.2M\n- Fases: Descubrimiento (8), Evaluación (6), Adquisición (4)",
+                    )
+                else:
+                    pc = meta.get("proj_cnt", 0)
+                    ip = meta.get("in_prog", 0)
+                    pa = meta.get("pending_appr", 0)
+                    tc = meta.get("tsk_cnt", 0)
+                    return (
+                        f"La empresa tiene {pc} proyectos activos y {ip} tareas en curso. {pa} aprobaciones pendientes.",
+                        f"### Resumen Ejecutivo\n- **Proyectos Activos**: {pc}\n- **Tareas Totales**: {tc} ({ip} en progreso)\n- **Aprobaciones Pendientes**: {pa}",
+                    )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                tid = meta.get("task_id", "")
+                title = meta.get("title", "")
+                role = meta.get("target_role", "Agente General")
+                return (
+                    "La tarea ha sido creada y asignada.",
+                    f"### Tarea Creada por Voz\n- **ID**: `{tid}`\n- **Título**: {title}\n- **Rol Asignado**: {role}\n- **Estado**: PLANNED",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                if meta.get("has_appr"):
+                    word = "aprobada" if meta.get("is_approve") else "rechazada"
+                    act = meta.get("action_type", "la tarea")
+                    aid = meta.get("appr_id", "")
+                    return (
+                        f"La solicitud de aprobación para {act} ha sido {word}.",
+                        f"### Aprobación {word.capitalize()}\n- **ID de Aprobación**: `{aid}`\n- **Acción**: {act}\n- **Estado**: {word.upper()}",
+                    )
+                return (
+                    "No hay aprobaciones pendientes que requieran su decisión.",
+                    "### Aprobaciones\nNo se encontraron aprobaciones pendientes.",
+                )
+            elif intent == VoiceIntent.TASK_CONTROL:
+                if meta.get("has_task"):
+                    tt = meta.get("task_title", "")
+                    tid = meta.get("task_id", "")
+                    return (
+                        f"La tarea '{tt}' ha sido detenida.",
+                        f"### Tarea Detenida\n- **ID**: `{tid}`\n- **Título**: {tt}\n- **Nuevo Estado**: CANCELLED",
+                    )
+                return (
+                    "No se encontró ninguna tarea activa en este contexto para detener.",
+                    "No se encontró ninguna tarea en progreso que detener.",
+                )
+            else:
+                tr = meta.get("transcript", "")
+                kt = meta.get("kn_title")
+                if kt:
+                    return (
+                        f"Respecto a {tr}, nuestra política canónica está documentada en '{kt}'.",
+                        f"### Respuesta Basada en Conocimiento\n**Consulta**: {tr}\n\n**Referencia**: {kt}\n{meta.get('kn_content', '')[:300]}...",
+                    )
+                return (
+                    f"He procesado su consulta: {tr}. Todas las operaciones permanecen dentro de parámetros normales.",
+                    f"### Respuesta Ejecutiva\nEntrada de voz procesada: *'{tr}'*\nEstado: Operacional.",
+                )
+
+        elif code == "fr":  # French
+            if intent == VoiceIntent.STATUS_QUERY:
+                pc = meta.get("proj_cnt", 0)
+                ip = meta.get("in_prog", 0)
+                pa = meta.get("pending_appr", 0)
+                tc = meta.get("tsk_cnt", 0)
+                return (
+                    f"L'entreprise compte {pc} projets actifs et {ip} tâches en cours. {pa} approbations en attente.",
+                    f"### Point Exécutif\n- **Projets Actifs**: {pc}\n- **Tâches Totales**: {tc} ({ip} en cours)\n- **Approbations en Attente**: {pa}",
+                )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                return (
+                    "La tâche a été créée et assignée avec succès.",
+                    f"### Tâche Créée par la Voix\n- **ID**: `{meta.get('task_id')}`\n- **Titre**: {meta.get('title')}\n- **Statut**: PLANNED",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                dec = "approuvée" if meta.get("is_approve") else "rejetée"
+                return (
+                    f"La demande d'approbation a été {dec}.",
+                    f"### Approbation {dec.capitalize()}\n- **Statut**: {dec.upper()}",
+                )
+            else:
+                tr = meta.get("transcript", "")
+                return (
+                    f"J'ai bien reçu votre demande : {tr}. Toutes les activités de l'entreprise se déroulent normalement.",
+                    f"### Réponse Exécutive\nDemande vocale traitée: *'{tr}'*\nStatut: Opérationnel.",
+                )
+
+        elif code == "de":  # German
+            if intent == VoiceIntent.STATUS_QUERY:
+                pc = meta.get("proj_cnt", 0)
+                ip = meta.get("in_prog", 0)
+                pa = meta.get("pending_appr", 0)
+                tc = meta.get("tsk_cnt", 0)
+                return (
+                    f"Das Unternehmen hat {pc} aktive Projekte und {ip} laufende Aufgaben. {pa} Genehmigungen stehen aus.",
+                    f"### Executive Briefing\n- **Aktive Projekte**: {pc}\n- **Aufgaben Gesamt**: {tc} ({ip} in Bearbeitung)\n- **Ausstehende Genehmigungen**: {pa}",
+                )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                return (
+                    "Die Aufgabe wurde erfolgreich erstellt und zugewiesen.",
+                    f"### Per Sprache Erstellte Aufgabe\n- **ID**: `{meta.get('task_id')}`\n- **Titel**: {meta.get('title')}\n- **Status**: PLANNED",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                dec = "genehmigt" if meta.get("is_approve") else "abgelehnt"
+                return (
+                    f"Die Genehmigungsanfrage wurde {dec}.",
+                    f"### Genehmigung {dec.capitalize()}\n- **Status**: {dec.upper()}",
+                )
+            else:
+                tr = meta.get("transcript", "")
+                return (
+                    f"Ich habe Ihre Anfrage '{tr}' verarbeitet. Alle Unternehmensabläufe laufen normal.",
+                    f"### Antwort der Geschäftsleitung\nSprachanfrage: *'{tr}'*\nStatus: Betriebsbereit.",
+                )
+
+        elif code == "ar":  # Arabic
+            tr = meta.get("transcript", "")
+            if intent == VoiceIntent.STATUS_QUERY:
+                pc = meta.get("proj_cnt", 0)
+                ip = meta.get("in_prog", 0)
+                pa = meta.get("pending_appr", 0)
+                return (
+                    f"لدى الشركة {pc} مشاريع نشطة و {ip} مهام قيد التنفيذ. {pa} موافقات معلقة.",
+                    f"### ملخص تنفيذي\n- **المشاريع النشطة**: {pc}\n- **المهام قيد التنفيذ**: {ip}\n- **الموافقات المعلقة**: {pa}",
+                )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                return (
+                    "تم إنشاء المهمة وتعيينها بنجاح.",
+                    f"### تم إنشاء المهمة صوتياً\n- **المعرف**: `{meta.get('task_id')}`\n- **العنوان**: {meta.get('title')}",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                dec = "الموافقة عليها" if meta.get("is_approve") else "رفضها"
+                return (
+                    f"تم {dec} على طلب الموافقة.",
+                    f"### قرار الموافقة\n- **الحالة**: {dec}",
+                )
+            else:
+                return (
+                    f"لقد استلمت استفسارك: '{tr}'. جميع عمليات الشركة تسير بشكل طبيعي.",
+                    f"### استجابة المدير التنفيذي\nالطلب الصوتي: *'{tr}'*\nالحالة: العمليات مستقرة.",
+                )
+
+        elif code == "hi":  # Hindi
+            tr = meta.get("transcript", "")
+            if intent == VoiceIntent.STATUS_QUERY:
+                pc = meta.get("proj_cnt", 0)
+                ip = meta.get("in_prog", 0)
+                pa = meta.get("pending_appr", 0)
+                return (
+                    f"कंपनी में {pc} सक्रिय प्रोजेक्ट और {ip} कार्य प्रगति पर हैं। {pa} स्वीकृतियां समीक्षा के लिए लंबित हैं।",
+                    f"### कार्यकारी सारांश\n- **सक्रिय प्रोजेक्ट**: {pc}\n- **प्रगति पर कार्य**: {ip}\n- **लंबित स्वीकृतियां**: {pa}",
+                )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                return (
+                    "कार्य सफलतापूर्वक बना दिया गया है और सौंप दिया गया है।",
+                    f"### वॉयस द्वारा निर्मित कार्य\n- **आईडी**: `{meta.get('task_id')}`\n- **शीर्षक**: {meta.get('title')}",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                dec = "स्वीकृत" if meta.get("is_approve") else "अस्वीकृत"
+                return (
+                    f"स्वीकृति अनुरोध को {dec} कर दिया गया है।",
+                    f"### स्वीकृति निर्णय\n- **स्थिति**: {dec.upper()}",
+                )
+            else:
+                return (
+                    f"मैंने आपके प्रश्न '{tr}' पर कार्रवाई की है। कंपनी का संचालन सामान्य रूप से जारी है।",
+                    f"### मुख्य कार्यकारी उत्तर\nवॉयस इनपुट: *'{tr}'*\nस्थिति: सामान्य।",
+                )
+
+        elif code == "zh":  # Chinese
+            tr = meta.get("transcript", "")
+            if intent == VoiceIntent.STATUS_QUERY:
+                pc = meta.get("proj_cnt", 0)
+                ip = meta.get("in_prog", 0)
+                pa = meta.get("pending_appr", 0)
+                return (
+                    f"公司目前有 {pc} 个进行中的项目和 {ip} 个正在执行的任务。有 {pa} 个待审批事项。",
+                    f"### 执行简报\n- **活跃项目**: {pc}\n- **执行中任务**: {ip}\n- **待审批**: {pa}",
+                )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                return (
+                    "任务已成功创建并分配。",
+                    f"### 语音创建任务\n- **ID**: `{meta.get('task_id')}`\n- **标题**: {meta.get('title')}",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                dec = "已批准" if meta.get("is_approve") else "已拒绝"
+                return (
+                    f"审批请求{dec}。",
+                    f"### 审批决定\n- **状态**: {dec}",
+                )
+            else:
+                return (
+                    f"已收到您的询问：“{tr}”。公司所有业务运转正常。",
+                    f"### CEO 回复\n已处理语音指令：*“{tr}”*\n状态：运行正常。",
+                )
+
+        elif code == "ja":  # Japanese
+            tr = meta.get("transcript", "")
+            if intent == VoiceIntent.STATUS_QUERY:
+                pc = meta.get("proj_cnt", 0)
+                ip = meta.get("in_prog", 0)
+                pa = meta.get("pending_appr", 0)
+                return (
+                    f"現在、{pc}件のアクティブなプロジェクトと{ip}件の進行中タスクがあります。{pa}件の承認が保留中です。",
+                    f"### エグゼクティブ・ブリーフィング\n- **アクティブプロジェクト**: {pc}\n- **進行中タスク**: {ip}\n- **保留中の承認**: {pa}",
+                )
+            elif intent in (VoiceIntent.TASK_CREATE, VoiceIntent.DELEGATION_COMMAND):
+                return (
+                    "タスクが正常に作成され、割り当てられました。",
+                    f"### 音声作成タスク\n- **ID**: `{meta.get('task_id')}`\n- **タイトル**: {meta.get('title')}",
+                )
+            elif intent == VoiceIntent.APPROVAL_DECISION:
+                dec = "承認" if meta.get("is_approve") else "却下"
+                return (
+                    f"承認リクエストが{dec}されました。",
+                    f"### 承認決定\n- **ステータス**: {dec}",
+                )
+            else:
+                return (
+                    f"ご質問「{tr}」を受け付けました。会社の業務は正常に進行しています。",
+                    f"### CEO回答\n音声入力: *「{tr}」*\n状態: 正常稼働中。",
+                )
+
+        # Generic international fallback for any other language
+        return spoken_response, detailed_response
 
     async def process_command(
         self,
@@ -324,12 +854,16 @@ class VoiceService:
         final_state = VoiceState.SPEAKING
 
         lower = transcript.lower()
+        response_meta: dict[str, Any] = {
+            "transcript": transcript,
+            "company_id": company_id,
+        }
 
         # 3. Execute according to intent
         if intent == VoiceIntent.STATUS_QUERY:
             session.state = VoiceState.PLANNING.value
             # Check if specific to blocked tasks or tasks needing attention
-            if any(w in lower for w in ["blocked", "attention", "which need"]):
+            if any(w in lower for w in ["blocked", "attention", "which need", "আটকে", "bloqueada"]):
                 task_res = await self.db.execute(
                     select(Task)
                     .where(
@@ -344,22 +878,29 @@ class VoiceService:
                 if count == 0:
                     spoken_response = "All tasks are progressing smoothly with no blocked items requiring attention."
                     detailed_response = "### Attention Overview\n- **Blocked / Critical Tasks**: 0\n- All workflows healthy."
+                    response_meta.update({"type": "attention", "count": 0, "names": "", "items_md": ""})
                 else:
                     task_names = [t.title for t in attention_tasks[:2]]
                     names_str = " and ".join([f"'{name}'" for name in task_names])
                     spoken_response = f"{count} tasks require attention, including {names_str}."
-                    detailed_response = f"### Tasks Requiring Attention ({count})\n" + "\n".join(
-                        f"- **{t.title}** ({t.status})" for t in attention_tasks
-                    )
+                    items_md = "\n".join(f"- **{t.title}** ({t.status})" for t in attention_tasks)
+                    detailed_response = f"### Tasks Requiring Attention ({count})\n" + items_md
+                    response_meta.update({
+                        "type": "attention",
+                        "count": count,
+                        "names": names_str,
+                        "items_md": items_md,
+                    })
                 context["last_topic"] = "attention_tasks"
                 action_taken = "FETCH_BLOCKED_TASKS"
 
-            elif "sales" in lower:
+            elif "sales" in lower or "বিক্রয়" in lower or "ventas" in lower:
                 # Sales / department specific
                 spoken_response = (
                     "Sales has 4 opportunities in progress with 2 requiring immediate follow up."
                 )
                 detailed_response = "### Sales Performance\n- Active Opportunities: 4\n- Needs Attention: 2\n- Target Market: EMEA & North America"
+                response_meta.update({"type": "sales"})
                 context["last_topic"] = "sales"
                 action_taken = "FETCH_SALES_STATUS"
 
@@ -367,6 +908,7 @@ class VoiceService:
                 # Exact Section 25 flow: "Show enterprise opportunities" -> "There are 18."
                 spoken_response = "There are 18 enterprise opportunities in the pipeline."
                 detailed_response = "### Enterprise Pipeline\n- Total Opportunities: 18\n- Active Value: $4.2M\n- Stages: Discovery (8), Evaluation (6), Procurement (4)"
+                response_meta.update({"type": "opportunities"})
                 context["last_topic"] = "opportunities"
                 action_taken = "FETCH_OPPORTUNITIES"
 
@@ -401,6 +943,13 @@ class VoiceService:
 
                 spoken_response = f"The company has {proj_cnt} active projects and {in_prog} tasks in progress. {pending_appr} approvals are pending review."
                 detailed_response = f"### Executive Briefing\n- **Active Projects**: {proj_cnt}\n- **Total Tasks**: {tsk_cnt} ({in_prog} in progress)\n- **Pending Approvals**: {pending_appr}"
+                response_meta.update({
+                    "type": "general",
+                    "proj_cnt": proj_cnt,
+                    "tsk_cnt": tsk_cnt,
+                    "in_prog": in_prog,
+                    "pending_appr": pending_appr,
+                })
                 context["last_topic"] = "general_briefing"
                 action_taken = "FETCH_EXECUTIVE_BRIEFING"
 
@@ -490,6 +1039,11 @@ class VoiceService:
 
             spoken_response = "The task has been created and assigned."
             detailed_response = f"### Task Created via Voice\n- **ID**: `{new_task.id}`\n- **Title**: {new_task.title}\n- **Assignee Role**: {target_role}\n- **Status**: PLANNED"
+            response_meta.update({
+                "task_id": new_task.id,
+                "title": new_task.title,
+                "target_role": target_role,
+            })
             action_taken = "CREATE_TASK"
             action_entity_id = new_task.id
             context["last_task_id"] = new_task.id
@@ -497,7 +1051,7 @@ class VoiceService:
 
         elif intent == VoiceIntent.APPROVAL_DECISION:
             session.state = VoiceState.EXECUTING.value
-            is_approve = "approve" in lower or "confirm" in lower or "accept" in lower
+            is_approve = "approve" in lower or "confirm" in lower or "accept" in lower or "অনুমোদন" in lower or "aprobar" in lower
 
             # Find target approval
             appr_stmt = (
@@ -518,12 +1072,19 @@ class VoiceService:
                 decision_word = "approved" if is_approve else "rejected"
                 spoken_response = f"The approval request for {appr.action_type or 'the task'} has been {decision_word}."
                 detailed_response = f"### Approval {decision_word.capitalize()}\n- **Approval ID**: `{appr.id}`\n- **Action**: {appr.action_type}\n- **Status**: {appr.status}"
+                response_meta.update({
+                    "has_appr": True,
+                    "is_approve": is_approve,
+                    "action_type": appr.action_type,
+                    "appr_id": appr.id,
+                })
                 action_taken = f"DECIDE_APPROVAL_{decision_word.upper()}"
                 action_entity_id = appr.id
                 context["last_approval_id"] = appr.id
             else:
                 spoken_response = "There are no pending approvals requiring your decision."
                 detailed_response = "### Approvals\nNo pending approvals found in this company."
+                response_meta.update({"has_appr": False})
                 action_taken = "CHECK_APPROVALS_NONE"
 
         elif intent == VoiceIntent.TASK_CONTROL:
@@ -554,11 +1115,13 @@ class VoiceService:
                 task.status = "CANCELLED"
                 spoken_response = f"Task '{task.title}' has been stopped."
                 detailed_response = f"### Task Stopped\n- **ID**: `{task.id}`\n- **Title**: {task.title}\n- **New Status**: CANCELLED"
+                response_meta.update({"has_task": True, "task_id": task.id, "task_title": task.title})
                 action_taken = "STOP_TASK"
                 action_entity_id = task.id
             else:
                 spoken_response = "No active task was found in this context to stop."
                 detailed_response = "No matching in-progress task found to halt."
+                response_meta.update({"has_task": False})
                 action_taken = "STOP_TASK_NONE"
 
         else:
@@ -571,10 +1134,20 @@ class VoiceService:
             if kn:
                 spoken_response = f"Regarding {transcript}, our canonical policy is documented under '{kn.title}'."
                 detailed_response = f"### Grounded Knowledge Response\n**Inquiry**: {transcript}\n\n**Reference**: {kn.title}\n{kn.content[:300]}..."
+                response_meta.update({"kn_title": kn.title, "kn_content": kn.content})
             else:
                 spoken_response = f"I have processed your inquiry: {transcript}. All company operations remain within normal parameters."
                 detailed_response = f"### Executive Response\nProcessed voice input: *'{transcript}'*.\nStatus: Operational."
             action_taken = "GENERAL_INQUIRY"
+
+        # Apply multilingual localization if language is requested
+        spoken_response, detailed_response = self._localize_response(
+            spoken_response=spoken_response,
+            detailed_response=detailed_response,
+            intent=intent,
+            language=payload.language,
+            meta=response_meta,
+        )
 
         # 4. Create VoiceInteraction record
         execution_time_ms = (time.perf_counter() - start_time) * 1000.0

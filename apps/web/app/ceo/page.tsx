@@ -21,6 +21,7 @@ import {
   ListTodo,
   Loader2,
   PlusCircle,
+  Radio,
   RefreshCw,
   Send,
   Share2,
@@ -382,6 +383,15 @@ export default function CeoCommandCenterPage() {
                 ))}
               </select>
             )}
+
+            <Link
+              href="/ceo/room"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-medium text-xs shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all hover:scale-105 active:scale-95"
+              title="Meet CEO in full-screen voice suite in any language"
+            >
+              <Radio className="w-3.5 h-3.5 animate-pulse text-cyan-200" />
+              <span>Enter CEO Suite (Voice)</span>
+            </Link>
           </div>
         </div>
 

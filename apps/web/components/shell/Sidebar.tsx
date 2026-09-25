@@ -80,6 +80,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           isCurrent: pathname === "/ceo",
         },
         {
+          name: "CEO Executive Suite",
+          href: "/ceo/room",
+          icon: Radio,
+          phaseBadge: "Voice Room",
+          isCurrent: pathname === "/ceo/room",
+        },
+        {
           name: "Agent Registry",
           href: "/agents",
           icon: Users,

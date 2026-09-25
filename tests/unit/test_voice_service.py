@@ -371,3 +371,45 @@ async def test_voice_synthesize_and_telemetry(
     assert telemetry.total_sessions >= 1
     assert telemetry.total_interactions >= 1
     assert telemetry.avg_execution_time_ms >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_voice_multilingual_responses(
+    db_session: AsyncSession, test_data: dict[str, str]
+) -> None:
+    """Test voice commands and responses in multiple languages (Bengali, Spanish, French)."""
+    service = VoiceService(db_session)
+
+    # 1. Bengali briefing query
+    resp_bn = await service.process_command(
+        company_id=test_data["company_id"],
+        user_id=test_data["user_id"],
+        payload=VoiceCommandPayload(transcript="কী খবর", language="bn-BD"),
+    )
+    assert resp_bn.intent == VoiceIntent.STATUS_QUERY
+    assert "সক্রিয় প্রকল্প" in resp_bn.spoken_response
+    assert "নির্বাহী ব্রিফিং" in resp_bn.detailed_response
+
+    # 2. Spanish task creation
+    resp_es = await service.process_command(
+        company_id=test_data["company_id"],
+        user_id=test_data["user_id"],
+        payload=VoiceCommandPayload(
+            transcript="crear tarea para optimizar la base de datos", language="es-ES"
+        ),
+    )
+    assert resp_es.intent == VoiceIntent.TASK_CREATE
+    assert "creada y asignada" in resp_es.spoken_response
+    assert "Tarea Creada por Voz" in resp_es.detailed_response
+
+    # 3. French general inquiry
+    resp_fr = await service.process_command(
+        company_id=test_data["company_id"],
+        user_id=test_data["user_id"],
+        payload=VoiceCommandPayload(
+            transcript="Comment pouvons-nous accélérer la croissance ?", language="fr-FR"
+        ),
+    )
+    assert resp_fr.intent == VoiceIntent.GENERAL_INQUIRY
+    assert "reçu votre demande" in resp_fr.spoken_response
+

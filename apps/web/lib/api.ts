@@ -2165,6 +2165,8 @@ export const api = {
   },
 };
 
+export const apiClient = api;
+
 export type PresenceStatus =
   | "ONLINE"
   | "IDLE"
@@ -2927,6 +2929,7 @@ export interface VoiceCommandPayload {
   session_id?: string | null;
   context_task_id?: string | null;
   project_id?: string | null;
+  language?: string | null;
 }
 
 export interface VoiceCommandResponse {

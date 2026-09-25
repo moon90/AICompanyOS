@@ -93,6 +93,9 @@ class VoiceCommandPayload(BaseModel):
     context_approval_id: str | None = Field(
         default=None, description="Active approval request in context"
     )
+    language: str | None = Field(
+        default=None, description="Spoken language ISO code (e.g. en, bn, es, fr, de, ar, hi, zh, ja)"
+    )
 
 
 class VoiceCommandResponse(BaseModel):
