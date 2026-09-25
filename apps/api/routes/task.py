@@ -39,17 +39,39 @@ def get_task_service(session: Annotated[AsyncSession, Depends(get_db_session)]) 
 
 def _to_task_response(task: Task) -> TaskResponse:
     """Helper to convert task model into TaskResponse with enriched presentation attributes."""
-    dependencies = [
-        TaskDependencyResponse(
-            id=d.id,
-            task_id=d.task_id,
-            depends_on_task_id=d.depends_on_task_id,
-            depends_on_task_title=d.depends_on_task.title if d.depends_on_task else None,
-            depends_on_task_status=d.depends_on_task.status if d.depends_on_task else None,
-            created_at=d.created_at,
-        )
-        for d in (task.dependencies or [])
-    ]
+    from sqlalchemy import inspect
+
+    insp = inspect(task)
+    unloaded = insp.unloaded if insp is not None else set()
+
+    dependencies: list[TaskDependencyResponse] = []
+    if "dependencies" not in unloaded and task.dependencies:
+        for d in task.dependencies:
+            d_insp = inspect(d)
+            d_unloaded = d_insp.unloaded if d_insp is not None else set()
+            dep_task = d.depends_on_task if "depends_on_task" not in d_unloaded else None
+            dependencies.append(
+                TaskDependencyResponse(
+                    id=d.id,
+                    task_id=d.task_id,
+                    depends_on_task_id=d.depends_on_task_id,
+                    depends_on_task_title=dep_task.title if dep_task else None,
+                    depends_on_task_status=dep_task.status if dep_task else None,
+                    created_at=d.created_at,
+                )
+            )
+
+    project_name = task.project.name if "project" not in unloaded and task.project else None
+    assigned_agent_name = (
+        task.assigned_agent.name if "assigned_agent" not in unloaded and task.assigned_agent else None
+    )
+    assigned_agent_role = (
+        task.assigned_agent.role if "assigned_agent" not in unloaded and task.assigned_agent else None
+    )
+    department_name = (
+        task.department.name if "department" not in unloaded and task.department else None
+    )
+    subtasks_count = len(task.subtasks) if "subtasks" not in unloaded and task.subtasks else 0
 
     return TaskResponse(
         id=task.id,
@@ -71,12 +93,12 @@ def _to_task_response(task: Task) -> TaskResponse:
         created_at=task.created_at,
         started_at=task.started_at,
         completed_at=task.completed_at,
-        project_name=task.project.name if task.project else None,
-        assigned_agent_name=task.assigned_agent.name if task.assigned_agent else None,
-        assigned_agent_role=task.assigned_agent.role if task.assigned_agent else None,
-        department_name=task.department.name if task.department else None,
+        project_name=project_name,
+        assigned_agent_name=assigned_agent_name,
+        assigned_agent_role=assigned_agent_role,
+        department_name=department_name,
         dependencies=dependencies,
-        subtasks_count=len(task.subtasks) if task.subtasks else 0,
+        subtasks_count=subtasks_count,
     )
 
 

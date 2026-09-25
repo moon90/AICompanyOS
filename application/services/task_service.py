@@ -273,6 +273,7 @@ class TaskService:
                 selectinload(Task.assigned_agent),
                 selectinload(Task.assigned_user),
                 selectinload(Task.department),
+                selectinload(Task.subtasks),
                 selectinload(Task.dependencies).selectinload(TaskDependency.depends_on_task),
             )
             .order_by(Task.created_at.desc())
