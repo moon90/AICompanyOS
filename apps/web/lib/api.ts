@@ -1675,13 +1675,33 @@ export const api = {
     const url = `${API_BASE_URL}/api/v1/companies/${companyId}/realtime/events`;
     const eventSource = new EventSource(url, { withCredentials: true });
 
-    eventSource.onmessage = (e) => {
+    const normalizeAndDispatch = (dataStr: string, defaultType: string = "system.connected") => {
       try {
-        const payload: LiveEventPayload = JSON.parse(e.data);
+        const raw = JSON.parse(dataStr);
+        const payload: LiveEventPayload = {
+          id: raw.id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          company_id: raw.company_id || companyId,
+          event_type: raw.event_type || defaultType,
+          message:
+            raw.message ||
+            raw.summary ||
+            (raw.status ? `Status: ${raw.status}` : "Real-time system update"),
+          actor_type: raw.actor_type || "SYSTEM",
+          actor_id: raw.actor_id ?? null,
+          actor_name: raw.actor_name ?? null,
+          project_id: raw.project_id ?? null,
+          task_id: raw.task_id ?? null,
+          metadata: raw.metadata || {},
+          timestamp: raw.timestamp || new Date().toISOString(),
+        };
         onEvent(payload);
       } catch (err) {
         console.error("Failed to parse SSE event data:", err);
       }
+    };
+
+    eventSource.onmessage = (e) => {
+      normalizeAndDispatch(e.data);
     };
 
     const eventTypes = [
@@ -1708,12 +1728,7 @@ export const api = {
 
     for (const type of eventTypes) {
       eventSource.addEventListener(type, (e: MessageEvent) => {
-        try {
-          const payload: LiveEventPayload = JSON.parse(e.data);
-          onEvent(payload);
-        } catch (err) {
-          console.error(`Failed to parse SSE event (${type}):`, err);
-        }
+        normalizeAndDispatch(e.data, type);
       });
     }
 

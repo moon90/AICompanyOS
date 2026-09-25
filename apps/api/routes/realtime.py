@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Annotated
@@ -49,8 +50,12 @@ async def stream_company_events(
             # Yield initial connection confirmation frame
             connected_data = json.dumps(
                 {
-                    "status": "connected",
+                    "id": f"evt-{uuid.uuid4().hex[:12]}",
+                    "event_type": "system.connected",
                     "company_id": company_id,
+                    "message": "Real-time event stream connected.",
+                    "actor_type": "SYSTEM",
+                    "status": "connected",
                     "timestamp": datetime.now(UTC).isoformat(),
                 }
             )

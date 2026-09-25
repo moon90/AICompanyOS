@@ -67,8 +67,9 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString();
 }
 
-function getEventStyle(eventType: string) {
-  if (eventType.startsWith("ceo.")) {
+function getEventStyle(eventType?: string | null) {
+  const type = typeof eventType === "string" ? eventType : "system.connected";
+  if (type.startsWith("ceo.")) {
     return {
       icon: Compass,
       bg: "bg-purple-500/10",
@@ -77,7 +78,7 @@ function getEventStyle(eventType: string) {
       label: "CEO Planning",
     };
   }
-  if (eventType.startsWith("agent.working")) {
+  if (type.startsWith("agent.working")) {
     return {
       icon: Cpu,
       bg: "bg-cyan-500/10",
@@ -86,7 +87,7 @@ function getEventStyle(eventType: string) {
       label: "Agent Working",
     };
   }
-  if (eventType.startsWith("agent.started") || eventType.startsWith("presence.")) {
+  if (type.startsWith("agent.started") || type.startsWith("presence.")) {
     return {
       icon: Bot,
       bg: "bg-emerald-500/10",
@@ -95,7 +96,7 @@ function getEventStyle(eventType: string) {
       label: "Agent Presence",
     };
   }
-  if (eventType.startsWith("task.assigned")) {
+  if (type.startsWith("task.assigned")) {
     return {
       icon: UserCheck,
       bg: "bg-indigo-500/10",
@@ -104,7 +105,7 @@ function getEventStyle(eventType: string) {
       label: "Task Assigned",
     };
   }
-  if (eventType.startsWith("task.blocked")) {
+  if (type.startsWith("task.blocked")) {
     return {
       icon: AlertTriangle,
       bg: "bg-amber-500/10",
@@ -113,7 +114,7 @@ function getEventStyle(eventType: string) {
       label: "Task Blocked",
     };
   }
-  if (eventType.startsWith("task.completed")) {
+  if (type.startsWith("task.completed")) {
     return {
       icon: CheckSquare,
       bg: "bg-emerald-500/10",
@@ -122,7 +123,7 @@ function getEventStyle(eventType: string) {
       label: "Task Completed",
     };
   }
-  if (eventType.startsWith("task.")) {
+  if (type.startsWith("task.")) {
     return {
       icon: CheckSquare,
       bg: "bg-blue-500/10",
@@ -131,7 +132,7 @@ function getEventStyle(eventType: string) {
       label: "Task State",
     };
   }
-  if (eventType.startsWith("tool.")) {
+  if (type.startsWith("tool.")) {
     return {
       icon: Wrench,
       bg: "bg-orange-500/10",
@@ -140,7 +141,7 @@ function getEventStyle(eventType: string) {
       label: "Tool Execution",
     };
   }
-  if (eventType.startsWith("approval.")) {
+  if (type.startsWith("approval.")) {
     return {
       icon: ShieldAlert,
       bg: "bg-rose-500/10",
@@ -149,7 +150,7 @@ function getEventStyle(eventType: string) {
       label: "Approval Gate",
     };
   }
-  if (eventType.startsWith("error.")) {
+  if (type.startsWith("error.")) {
     return {
       icon: Bug,
       bg: "bg-rose-500/10",
@@ -158,7 +159,7 @@ function getEventStyle(eventType: string) {
       label: "Error / Bug",
     };
   }
-  if (eventType.startsWith("engineering.")) {
+  if (type.startsWith("engineering.")) {
     return {
       icon: FolderGit2,
       bg: "bg-sky-500/10",
@@ -167,12 +168,21 @@ function getEventStyle(eventType: string) {
       label: "Engineering",
     };
   }
+  if (type.startsWith("system.")) {
+    return {
+      icon: Radio,
+      bg: "bg-emerald-500/10",
+      text: "text-emerald-400",
+      border: "border-emerald-500/20",
+      label: "System Event",
+    };
+  }
   return {
     icon: Radio,
     bg: "bg-slate-800",
     text: "text-slate-400",
     border: "border-slate-700",
-    label: eventType.replace(/_/g, " "),
+    label: (type || "Event").replace(/_/g, " "),
   };
 }
 
@@ -307,7 +317,7 @@ export default function DashboardPage() {
         });
 
         // Background auto-refresh without full-page spinner
-        const et = event.event_type;
+        const et = event.event_type || "";
         if (et.startsWith("task.")) {
           api
             .getTasks(activeCompany.id)
@@ -818,20 +828,21 @@ export default function DashboardPage() {
             <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
               {liveEvents
                 .filter((ev) => {
+                  const et = ev.event_type || "";
                   if (selectedEventType === "ALL") return true;
                   if (selectedEventType === "AGENT")
                     return (
-                      ev.event_type.startsWith("agent.") ||
-                      ev.event_type.startsWith("presence.")
+                      et.startsWith("agent.") ||
+                      et.startsWith("presence.")
                     );
                   if (selectedEventType === "TASK")
-                    return ev.event_type.startsWith("task.");
+                    return et.startsWith("task.");
                   if (selectedEventType === "APPROVAL")
-                    return ev.event_type.startsWith("approval.");
+                    return et.startsWith("approval.");
                   if (selectedEventType === "ERROR")
-                    return ev.event_type.startsWith("error.");
+                    return et.startsWith("error.");
                   if (selectedEventType === "CEO")
-                    return ev.event_type.startsWith("ceo.");
+                    return et.startsWith("ceo.");
                   return true;
                 })
                 .map((ev) => {
