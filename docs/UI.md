@@ -969,6 +969,50 @@ Do not create large pulsing neon circles.
 
 ---
 
+## 24.1 AI Agent Interactive Meeting Room (`/meeting`)
+
+A dedicated cyber-obsidian executive meeting space designed for high-bandwidth human-agent alignment across portfolio projects, feature additions, bug fixing, and architecture reviews.
+
+### Screen Architecture & Layout
+
+1. **Header Bar:**
+   * **Active Agent Identity Pill:** Shows the current agent's identity, active state (`Online` pulsating indicator), and role.
+   * **Agent Switcher Dropdown:** Enables seamless switching between available company agents (e.g., Executive CEO, Engineering Lead, Support Agent).
+   * **Control Actions:** Fullscreen toggle, meeting settings modal trigger (reasoning model and language selection), and exit navigation.
+
+2. **Left Column — Live Conversation Stream & Session Info:**
+   * **Conversation Card:** Real-time auto-scrolling dialogue history with timestamps, speaker badges, typing indicator, and bidirectional text input box with send button.
+   * **Session Info Card:** Live meeting duration timer (`hh:mm:ss`), active AI reasoning model indicator (`GPT-4o`, `Claude 3.5 Sonnet`, `Gemini 2.0 Flash`), and active international language tag.
+
+3. **Center Stage — 3D Holographic Canvas Orb & Call Dock:**
+   * **3D Holographic Orb:** Rendered on an HTML5 `<canvas>` using dynamic multi-stop radial gradients (violet, cyan, magenta, and core bloom) that react in real-time to speech amplitude and system processing state.
+   * **Perspective Floor Ripple Rings:** Concentric elliptical ripples beneath the orb pulsing rhythmically with audio frequencies.
+   * **Camera Video Preview:** Picture-in-picture stream preview when webcam capture is active.
+   * **Floating Call Dock:**
+     * `End Call`: Red circular button to terminate call session, cancel speech, and return to Dashboard (`/`).
+     * `Share Screen`: Toggles browser screen capture via `navigator.mediaDevices.getDisplayMedia`.
+     * `Camera`: Toggles webcam capture via `navigator.mediaDevices.getUserMedia`.
+     * `Microphone`: Toggles audio stream capture and speech recognition.
+
+4. **Right Column — Capabilities & Live Audio Level:**
+   * **Capabilities Action Matrix:**
+     * **Data Analysis (Projects):** Queries active company projects, tasks in progress, and roadmap metrics via `/projects` and `/tasks` APIs.
+     * **Smart Insights (Feature Additions):** Dissects feature requirements and automatically architects and registers new feature tasks into company backlog via `/tasks` API.
+     * **Report Generation (Bug Triage):** Triages open bug records, severity breakdown, and active agent investigations via `/errors` summary API.
+     * **Code Assistance (Engineering):** Coordinates engineering tasks, code reviews, and architecture analysis.
+   * **Audio Level Equalizer:** Real-time Web Audio API `AudioContext` and `AnalyserNode` FFT frequency spectrum driving violet/pink symmetric equalizer bars.
+
+5. **Audio Pipeline & Loop Prevention Architecture:**
+   * **Acoustic Echo Suppression (`isAiSpeakingRef`):** Speech recognition is actively ignored while the AI vocalizer is speaking to prevent the microphone from transcribing speaker audio.
+   * **Acoustic Reverberation Guard:** 600ms grace period after speech synthesis completion before speech recognition accepts new audio.
+   * **Utterance Deduplication:** Suppresses identical consecutive speech recognition transcripts within a 3.5-second window.
+   * **Queue Flushing:** Cancels pending speech synthesis queues before new speech output and on session termination.
+
+6. **Navigation Resilience:**
+   * `/dashboard` automatically issues an HTTP 307 redirect to `/` to ensure zero broken links across all navigation flows.
+
+---
+
 # 25. CEO Conversation Design
 
 Conversation should prioritize outcomes.
