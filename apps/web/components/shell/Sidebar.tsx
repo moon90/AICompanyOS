@@ -23,6 +23,7 @@ import {
   Sparkles,
   User as UserIcon,
   Users,
+  Video,
   Wrench,
   X,
 } from "lucide-react";
@@ -85,6 +86,13 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           icon: Radio,
           phaseBadge: "Voice Room",
           isCurrent: pathname === "/ceo/room",
+        },
+        {
+          name: "AI Agent Meeting",
+          href: "/meeting",
+          icon: Video,
+          phaseBadge: "Live Room",
+          isCurrent: pathname === "/meeting",
         },
         {
           name: "Agent Registry",
