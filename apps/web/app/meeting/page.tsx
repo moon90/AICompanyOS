@@ -175,6 +175,13 @@ export default function AgentMeetingRoomPage() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const orbCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Acoustic Echo Cancellation, Deduplication & Inquiry Dispatch Refs
+  const isAiSpeakingRef = useRef<boolean>(false);
+  const isAiThinkingRef = useRef<boolean>(false);
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const lastProcessedTranscriptRef = useRef<{ text: string; time: number }>({ text: "", time: 0 });
+  const handleProcessInquiryRef = useRef<(prompt: string, category?: ChatMessage["category"]) => void>(() => {});
+
   // ---------------------------------------------------------------------------
   // Load Context on Mount
   // ---------------------------------------------------------------------------
@@ -437,6 +444,24 @@ export default function AgentMeetingRoomPage() {
     setAudioLevel(15);
   }, []);
 
+  // Keep refs in sync with state
+  useEffect(() => {
+    isAiThinkingRef.current = isAiThinking;
+  }, [isAiThinking]);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Web Speech API: Text-to-Speech (Multilingual Voice Vocalizer)
   // ---------------------------------------------------------------------------
@@ -445,7 +470,10 @@ export default function AgentMeetingRoomPage() {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       if (isAudioMuted || !text) return;
 
+      // Cancel any ongoing speech to prevent stacked voice loops
       window.speechSynthesis.cancel();
+      isAiSpeakingRef.current = true;
+
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = selectedLanguage.code;
       utterance.rate = 1.0;
@@ -459,10 +487,24 @@ export default function AgentMeetingRoomPage() {
 
       if (matched) utterance.voice = matched;
 
-      utterance.onstart = () => setAudioLevel(75);
-      utterance.onend = () => setAudioLevel(25);
-      utterance.onerror = () => setAudioLevel(25);
+      utterance.onstart = () => {
+        isAiSpeakingRef.current = true;
+        setAudioLevel(75);
+      };
 
+      const finishSpeech = () => {
+        setAudioLevel(25);
+        activeUtteranceRef.current = null;
+        // 600ms acoustic grace period to prevent microphone picking up speaker reverb
+        setTimeout(() => {
+          isAiSpeakingRef.current = false;
+        }, 600);
+      };
+
+      utterance.onend = finishSpeech;
+      utterance.onerror = finishSpeech;
+
+      activeUtteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     },
     [isAudioMuted, selectedLanguage]
@@ -590,8 +632,13 @@ export default function AgentMeetingRoomPage() {
     [companyId, isAiThinking, activeAgent.name, selectedLanguage, speakVoice]
   );
 
+  // Sync ref
+  useEffect(() => {
+    handleProcessInquiryRef.current = handleProcessInquiry;
+  }, [handleProcessInquiry]);
+
   // ---------------------------------------------------------------------------
-  // Web Speech API: Speech Recognition
+  // Web Speech API: Speech Recognition with Echo Suppression & Deduplication
   // ---------------------------------------------------------------------------
   const startSpeechRecognition = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -600,6 +647,13 @@ export default function AgentMeetingRoomPage() {
 
     if (!SpeechRecognition) return;
 
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      recognitionRef.current = null;
+    }
+
     try {
       const recognition = new SpeechRecognition();
       recognition.lang = selectedLanguage.code;
@@ -607,13 +661,31 @@ export default function AgentMeetingRoomPage() {
       recognition.interimResults = true;
 
       recognition.onresult = (event: any) => {
+        // Acoustic Echo Suppression: Ignore any input if AI is speaking or thinking
+        if (isAiSpeakingRef.current || isAiThinkingRef.current) {
+          return;
+        }
+
         let interim = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const res = event.results[i];
           if (res.isFinal) {
-            const final = res[0].transcript;
+            const final = res[0].transcript?.trim() || "";
+            if (!final) continue;
+
+            // Deduplication: prevent the exact same phrase from re-triggering within 3.5 seconds
+            const clean = final.toLowerCase();
+            const now = Date.now();
+            if (
+              clean === lastProcessedTranscriptRef.current.text &&
+              now - lastProcessedTranscriptRef.current.time < 3500
+            ) {
+              continue;
+            }
+            lastProcessedTranscriptRef.current = { text: clean, time: now };
+
             setInterimSpeech("");
-            handleProcessInquiry(final);
+            handleProcessInquiryRef.current(final);
           } else {
             interim += res[0].transcript;
           }
@@ -630,7 +702,7 @@ export default function AgentMeetingRoomPage() {
     } catch (e) {
       console.warn("Speech recognition start skipped:", e);
     }
-  }, [selectedLanguage, handleProcessInquiry]);
+  }, [selectedLanguage]);
 
   const stopSpeechRecognition = useCallback(() => {
     if (recognitionRef.current) {
@@ -795,7 +867,7 @@ export default function AgentMeetingRoomPage() {
             </button>
 
             <Link
-              href="/dashboard"
+              href="/"
               className="p-2 rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-slate-400 hover:text-white text-xs transition-all"
               title="Close Meeting Window"
             >
@@ -981,7 +1053,10 @@ export default function AgentMeetingRoomPage() {
                     setIsCallActive(false);
                     stopAudioCapture();
                     stopSpeechRecognition();
-                    window.location.href = "/dashboard";
+                    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                      window.speechSynthesis.cancel();
+                    }
+                    window.location.href = "/";
                   }}
                   className="w-12 h-12 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center shadow-[0_0_25px_rgba(244,63,94,0.6)] hover:scale-105 active:scale-95 transition-all"
                   title="Leave Meeting Room"
