@@ -2163,6 +2163,124 @@ export const api = {
       `/api/v1/companies/${companyId}/verification/telemetry`
     );
   },
+
+  // ==========================================
+  // Phase 23: Security Hardening & Default-DENY
+  // ==========================================
+  async getSecuritySummary(
+    companyId: string
+  ): Promise<SecuritySummaryResponse> {
+    return request<SecuritySummaryResponse>(
+      `/api/v1/companies/${companyId}/security/summary`
+    );
+  },
+
+  async getSecurityLogs(
+    companyId: string,
+    params?: {
+      event_type?: string;
+      severity?: string;
+      is_blocked?: boolean;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<SecurityLogListResponse> {
+    const query = new URLSearchParams();
+    if (params?.event_type) query.set("event_type", params.event_type);
+    if (params?.severity) query.set("severity", params.severity);
+    if (params?.is_blocked !== undefined)
+      query.set("is_blocked", String(params.is_blocked));
+    if (params?.limit !== undefined) query.set("limit", String(params.limit));
+    if (params?.offset !== undefined) query.set("offset", String(params.offset));
+
+    const qs = query.toString();
+    return request<SecurityLogListResponse>(
+      `/api/v1/companies/${companyId}/security/logs${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  async createSecurityLog(
+    companyId: string,
+    payload: SecurityLogCreateRequest
+  ): Promise<SecurityLogItem> {
+    return request<SecurityLogItem>(
+      `/api/v1/companies/${companyId}/security/logs`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async listAgentSecurityPolicies(
+    companyId: string
+  ): Promise<AgentPolicyResponse[]> {
+    return request<AgentPolicyResponse[]>(
+      `/api/v1/companies/${companyId}/security/policies`
+    );
+  },
+
+  async getAgentSecurityPolicy(
+    companyId: string,
+    agentId: string
+  ): Promise<AgentPolicyResponse> {
+    return request<AgentPolicyResponse>(
+      `/api/v1/companies/${companyId}/security/policies/agent/${agentId}`
+    );
+  },
+
+  async updateAgentSecurityPolicy(
+    companyId: string,
+    agentId: string,
+    payload: AgentPolicyUpdateRequest
+  ): Promise<AgentPolicyResponse> {
+    return request<AgentPolicyResponse>(
+      `/api/v1/companies/${companyId}/security/policies/agent/${agentId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async quarantineAgent(
+    companyId: string,
+    agentId: string,
+    reason: string
+  ): Promise<AgentPolicyResponse> {
+    return request<AgentPolicyResponse>(
+      `/api/v1/companies/${companyId}/security/agents/${agentId}/quarantine`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }
+    );
+  },
+
+  async unquarantineAgent(
+    companyId: string,
+    agentId: string
+  ): Promise<AgentPolicyResponse> {
+    return request<AgentPolicyResponse>(
+      `/api/v1/companies/${companyId}/security/agents/${agentId}/unquarantine`,
+      {
+        method: "POST",
+      }
+    );
+  },
+
+  async scanPromptSecurity(
+    companyId: string,
+    payload: PromptScanRequest
+  ): Promise<PromptScanResponse> {
+    return request<PromptScanResponse>(
+      `/api/v1/companies/${companyId}/security/scan-prompt`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
 };
 
 export const apiClient = api;
@@ -3075,6 +3193,136 @@ export interface VerificationTelemetryResponse {
   avg_overall_score: number;
   avg_scores_by_criterion: Record<string, number>;
   active_benchmarks_count: number;
+  timestamp: string;
+}
+
+// ==========================================
+// Phase 23: Security Hardening & Default-DENY Types
+// ==========================================
+export type SecurityActorType =
+  | "SYSTEM"
+  | "USER"
+  | "AGENT"
+  | "TOOL"
+  | "EXTERNAL";
+
+export type SecurityEventType =
+  | "AUTHENTICATION_FAILED"
+  | "AUTHORIZATION_DENIED"
+  | "CAPABILITY_BLOCKED"
+  | "PROMPT_INJECTION_ATTEMPT"
+  | "SECRET_LEAK_PREVENTED"
+  | "CROSS_TENANT_ATTEMPT"
+  | "RATE_LIMIT_EXCEEDED"
+  | "AGENT_QUARANTINED"
+  | "POLICY_VIOLATION"
+  | "SUSPICIOUS_ACTIVITY";
+
+export type SecuritySeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type SecurityPosture =
+  | "DEFAULT_DENY"
+  | "RESTRICTED"
+  | "MONITORED"
+  | "PERMISSIVE";
+
+export type AgentCapability =
+  | "READ"
+  | "WRITE"
+  | "EXECUTE_TOOL"
+  | "NETWORK_CALL"
+  | "STATE_TRANSITION"
+  | "DELEGATE"
+  | "ACCESS_MEMORY"
+  | "CREATE_ARTIFACT";
+
+export interface SecurityLogItem {
+  id: string;
+  company_id: string;
+  user_id?: string | null;
+  actor_type: SecurityActorType;
+  event_type: SecurityEventType;
+  severity: SecuritySeverity;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  action_details?: Record<string, unknown> | null;
+  is_blocked: boolean;
+  created_at: string;
+}
+
+export interface SecurityLogListResponse {
+  items: SecurityLogItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SecurityLogCreateRequest {
+  actor_type: SecurityActorType;
+  event_type: SecurityEventType;
+  severity: SecuritySeverity;
+  user_id?: string | null;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  action_details?: Record<string, unknown> | null;
+  is_blocked?: boolean;
+}
+
+export interface AgentPolicyResponse {
+  id: string;
+  company_id: string;
+  agent_id: string;
+  default_posture: SecurityPosture;
+  allowed_capabilities: AgentCapability[];
+  denied_capabilities: AgentCapability[];
+  rate_limit_rpm: number;
+  max_daily_budget: number;
+  can_execute_destructive_tools: boolean;
+  requires_human_approval_for_tools: boolean;
+  is_quarantined: boolean;
+  quarantine_reason?: string | null;
+  quarantined_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentPolicyUpdateRequest {
+  default_posture?: SecurityPosture;
+  allowed_capabilities?: AgentCapability[];
+  denied_capabilities?: AgentCapability[];
+  rate_limit_rpm?: number;
+  max_daily_budget?: number;
+  can_execute_destructive_tools?: boolean;
+  requires_human_approval_for_tools?: boolean;
+}
+
+export interface PromptScanRequest {
+  content: string;
+  source_type?: string;
+}
+
+export interface PromptScanResponse {
+  is_safe: boolean;
+  injection_detected: boolean;
+  injection_indicators: string[];
+  redacted_content: string;
+  redacted_secrets_count: number;
+  data_tagged_content: string;
+}
+
+export interface SecuritySummaryResponse {
+  company_id: string;
+  posture: SecurityPosture;
+  total_events_24h: number;
+  blocked_threats_24h: number;
+  critical_alerts_24h: number;
+  quarantined_agents_count: number;
+  active_policies_count: number;
+  recent_threats: SecurityLogItem[];
   timestamp: string;
 }
 

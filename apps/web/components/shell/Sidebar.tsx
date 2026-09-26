@@ -18,6 +18,7 @@ import {
   Mic,
   Radio,
   Settings,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -203,10 +204,16 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
           isCurrent: pathname === "/verification",
         },
         {
+          name: "Security Hardening",
+          href: "/security",
+          icon: Shield,
+          phaseBadge: "Phase 23",
+          isCurrent: pathname === "/security",
+        },
+        {
           name: "Settings",
           href: "/settings",
           icon: Settings,
-          phaseBadge: "Phase 23",
           isCurrent: pathname === "/settings",
         },
       ],
@@ -290,17 +297,17 @@ export function Sidebar({ user, onLogout, onCloseMobile }: SidebarProps) {
         ))}
       </div>
 
-      {/* Phase Boundary Widget per UI.md § 22 */}
+      {/* Phase Boundary Widget per UI.md § 23 */}
       <div className="p-3 mx-3 mb-3 rounded-lg border border-[#1e2738] bg-[#111724]">
         <div className="flex items-center justify-between text-[11px] mb-1.5">
-          <span className="text-slate-400 font-medium">Verification &amp; Eval</span>
+          <span className="text-slate-400 font-medium">Security Hardening</span>
           <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Phase 22 Active
+            Phase 23 Active
           </span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed">
-          Rule 17 independent verification pipeline, 8-dimensional AI evaluation scorecard &amp; benchmark suite active in <strong className="text-slate-300">Phase 22</strong>.
+          Rule 185 Default-DENY policies, PromptGuard jailbreak defense, OWASP headers &amp; immutable audit logging active in <strong className="text-slate-300">Phase 23</strong>.
         </p>
       </div>
 

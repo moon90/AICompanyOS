@@ -1119,10 +1119,75 @@
 
 ---
 
+---
+
+### Phase 23 — Security Hardening (COMPLETE)
+
+* **Database Migration & Models:**
+  * Defined `SecurityAuditLog` and `AgentSecurityPolicy` models in `infrastructure/database/models.py`.
+  * Added bidirectional relationships to `Company`, `User`, and `Agent`.
+  * Created and applied Alembic migration `database/migrations/versions/0021_create_security_hardening.py` (`0021_create_security_hardening`, 31 chars $\le 32$ byte limit).
+  * Enforced multi-tenant isolation, compound indexes on `[company_id, event_type]`, `[company_id, severity]`, `[company_id, created_at]`, and unique index on `agent_id` with verified zero schema drift (`alembic check`).
+* **Domain Layer (`domain/security/`):**
+  * `domain/security/enums.py`: `ActorType` (`SYSTEM`, `USER`, `AGENT`, `TOOL`, `EXTERNAL`), `SecurityEventType` (`AUTHENTICATION_FAILED`, `AUTHORIZATION_DENIED`, `CAPABILITY_BLOCKED`, `PROMPT_INJECTION_ATTEMPT`, `SECRET_LEAK_PREVENTED`, `CROSS_TENANT_ATTEMPT`, `RATE_LIMIT_EXCEEDED`, `AGENT_QUARANTINED`, `POLICY_VIOLATION`, `SUSPICIOUS_ACTIVITY`), `SecuritySeverity` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), `SecurityPosture` (`DEFAULT_DENY`, `RESTRICTED`, `MONITORED`, `PERMISSIVE`), `AgentCapability` (8 canonical capabilities: `READ`, `WRITE`, `EXECUTE_TOOL`, `NETWORK_CALL`, `STATE_TRANSITION`, `DELEGATE`, `ACCESS_MEMORY`, `CREATE_ARTIFACT`).
+  * `domain/security/exceptions.py`: `SecurityError`, `CrossTenantAccessError`, `CapabilityDeniedError`, `PromptInjectionDetectedError`, `AgentQuarantinedError`, `RateLimitExceededError`, `CredentialLeakError`, `SecurityPolicyNotFoundError`.
+  * `domain/security/prompt_guard.py`: `PromptGuard` enforcing Rule 169 untrusted input isolation, multi-pattern jailbreak/injection detection, and multi-pattern secret sanitization (OpenAI/Anthropic API keys, AWS access keys, Database URI credentials, JWT tokens, PEM private keys) with `<untrusted_data source="...">` tagging.
+  * `domain/security/schemas.py`: Pydantic validation models for audit logs, agent capability policies, prompt scan telemetry, quarantine requests, and executive posture summaries.
+* **Infrastructure Layer:**
+  * `infrastructure/security/headers.py`: `SecurityHeadersMiddleware` adding OWASP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`).
+  * `infrastructure/security/rate_limiter.py`: `ApiRateLimiter` sliding-window in-memory rate limiter with automated rate limit audit logging.
+* **Application Services (`application/services/security_service.py`):**
+  * Implemented `SecurityService`:
+    * `log_security_event`: Immutable audit logging for security events and threat attempts.
+    * `get_security_logs`: Paginated multi-tenant audit query with severity, event type, and blocked filters.
+    * `get_security_summary`: Operational telemetry summarizing security posture, blocked threats, quarantine counts, and active policies.
+    * `get_agent_policy`: Auto-initializes Rule 185 Default-DENY policies for agents if not previously registered.
+    * `update_agent_policy`: Granular capability opt-ins, rate limit RPM, budget, and approval requirements.
+    * `quarantine_agent`: Immediate revocation of all agent action privileges with audit trail.
+    * `unquarantine_agent`: Restores quarantined agent back to authorized policy state.
+    * `evaluate_agent_capability`: Strict capability access evaluator enforcing Default-DENY per Rule 185.
+    * `scan_and_sanitize_prompt`: Scans and redacts untrusted user/external inputs before LLM ingestion.
+    * `verify_tenant_boundary`: Validates multi-tenant boundaries and logs cross-company breach attempts.
+  * `application/services/system_service.py`: Updated `CURRENT_PHASE = "Phase 23 — Security Hardening"`.
+* **API Layer (`apps/api/`):**
+  * `apps/api/schemas/security.py`: Re-exports domain security schemas.
+  * `apps/api/routes/security.py`:
+    * `GET /api/v1/companies/{company_id}/security/summary`
+    * `GET /api/v1/companies/{company_id}/security/logs`
+    * `POST /api/v1/companies/{company_id}/security/logs`
+    * `GET /api/v1/companies/{company_id}/security/policies`
+    * `GET /api/v1/companies/{company_id}/security/policies/agent/{agent_id}`
+    * `PUT /api/v1/companies/{company_id}/security/policies/agent/{agent_id}`
+    * `POST /api/v1/companies/{company_id}/security/agents/{agent_id}/quarantine`
+    * `POST /api/v1/companies/{company_id}/security/agents/{agent_id}/unquarantine`
+    * `POST /api/v1/companies/{company_id}/security/scan-prompt`
+  * Registered `SecurityHeadersMiddleware` and `security_router` in `apps/api/main.py`.
+* **Web Layer & Security Console (`apps/web/`):**
+  * Extended `apps/web/lib/api.ts` with Phase 23 TypeScript interfaces and client methods (`getSecuritySummary`, `getSecurityLogs`, `createSecurityLog`, `listAgentSecurityPolicies`, `getAgentSecurityPolicy`, `updateAgentSecurityPolicy`, `quarantineAgent`, `unquarantineAgent`, `scanPromptSecurity`).
+  * Added unit tests in `apps/web/lib/api.test.ts` (57/57 passing).
+  * Built `apps/web/app/security/page.tsx`:
+    * Executive Banner with live `DEFAULT_DENY POSTURE ENFORCED` badge and 5 threat telemetry KPI cards.
+    * Agent Capability Matrix tab with granular capability toggles, quarantine triggers, and policy editor.
+    * Authoritative Security Audit Logs tab with severity/event type filters and JSON inspection drawer.
+    * PromptGuard Defense Testbench playground with one-click attack presets, secret scanner, and data-tagged output preview.
+  * Updated `apps/web/app/settings/page.tsx` with direct launch cards into Security Console.
+  * Updated `apps/web/components/shell/Sidebar.tsx` with `Shield` icon, `/security` nav item with `Phase 23` badge, and updated Phase 23 Boundary Widget.
+* **Testing & Quality Assurance:**
+  * 266/266 backend unit and integration tests passing (`uv run pytest`).
+  * 57/57 frontend vitest tests passing (`npm test --prefix apps/web`).
+  * 25/25 static Next.js pages successfully generated (`npm run build --prefix apps/web`).
+  * 0 ESLint warnings or errors (`npm run lint --prefix apps/web`).
+  * 0 Ruff linter/formatter errors (`uv run ruff check`).
+  * 0 MyPy type errors across all 274 backend source files (`uv run mypy`).
+  * 0 Alembic schema drift (`uv run alembic check`).
+
+---
+
 ## Next Authorized Phase
 
-**Phase 23 — Security Hardening**
-*(Awaiting user authorization before proceeding per `docs/Phases.md` § 27).*
+**Phase 24 — Observability & Cost Management**
+*(Awaiting user authorization before proceeding per `docs/Phases.md` § 28).*
+
 
 
 

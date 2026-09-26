@@ -52,3 +52,50 @@ class LoginRateLimiter:
 
 
 login_rate_limiter = LoginRateLimiter()
+
+
+class ApiRateLimiter:
+    """General sliding-window rate limiter for API requests and agent calls."""
+
+    def __init__(self, default_limit: int = 120, window_seconds: int = 60) -> None:
+        self.default_limit = default_limit
+        self.window_seconds = window_seconds
+        self._requests: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def _cleanup_old_requests(self, key: str, now: float) -> list[float]:
+        threshold = now - self.window_seconds
+        reqs = [ts for ts in self._requests.get(key, []) if ts > threshold]
+        if reqs:
+            self._requests[key] = reqs
+        else:
+            self._requests.pop(key, None)
+        return reqs
+
+    def check_and_record(self, key: str, limit: int | None = None) -> tuple[bool, int]:
+        """Check if request is allowed, and record it if allowed.
+
+        Returns:
+            tuple[bool, int]: (is_allowed, remaining_requests)
+        """
+        max_limit = limit or self.default_limit
+        now = datetime.now(UTC).timestamp()
+        with self._lock:
+            reqs = self._cleanup_old_requests(key, now)
+            if len(reqs) >= max_limit:
+                return False, 0
+            reqs.append(now)
+            self._requests[key] = reqs
+            remaining = max(0, max_limit - len(reqs))
+            return True, remaining
+
+    def reset(self, key: str | None = None) -> None:
+        """Reset rate limiter counts."""
+        with self._lock:
+            if key is not None:
+                self._requests.pop(key, None)
+            else:
+                self._requests.clear()
+
+
+api_rate_limiter = ApiRateLimiter()

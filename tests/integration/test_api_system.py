@@ -82,6 +82,6 @@ async def test_system_status_authenticated(app_client: AsyncClient) -> None:
     assert data["status"] == "operational"
     assert data["database"] == "connected"
     assert data["auth_authority"] == "postgresql_sessions"
-    assert data["current_phase"] == "Phase 22 — Verification & AI Evaluation"
+    assert data["current_phase"] == "Phase 23 — Security Hardening"
     assert data["environment"] == "test"
     assert "timestamp" in data

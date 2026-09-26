@@ -23,6 +23,7 @@ from apps.api.routes.memory import router as memory_router
 from apps.api.routes.presence import router as presence_router
 from apps.api.routes.project import router as project_router
 from apps.api.routes.realtime import router as realtime_router
+from apps.api.routes.security import router as security_router
 from apps.api.routes.semantic import router as semantic_router
 from apps.api.routes.system import router as system_router
 from apps.api.routes.task import router as task_router
@@ -30,6 +31,7 @@ from apps.api.routes.tool import router as tool_router
 from apps.api.routes.verification import router as verification_router
 from apps.api.routes.voice import router as voice_router
 from infrastructure.config import Settings, get_settings
+from infrastructure.security.headers import SecurityHeadersMiddleware
 from infrastructure.security.rate_limiter import LoginRateLimiter
 
 
@@ -57,7 +59,8 @@ def create_application(settings: Settings | None = None) -> FastAPI:
         window_seconds=app_settings.login_rate_limit_window_seconds,
     )
 
-    # CORS configuration
+    # Security headers & CORS configuration
+    application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -96,6 +99,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     application.include_router(semantic_router)
     application.include_router(voice_router)
     application.include_router(verification_router)
+    application.include_router(security_router)
 
     return application
 

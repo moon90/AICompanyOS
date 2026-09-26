@@ -108,6 +108,11 @@ class User(Base):
         back_populates="assigned_user",
         foreign_keys="ErrorRecord.assigned_user_id",
     )
+    security_audit_logs: Mapped[list["SecurityAuditLog"]] = relationship(
+        "SecurityAuditLog",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserSession(Base):
@@ -292,6 +297,16 @@ class Company(Base):
     )
     evaluation_benchmarks: Mapped[list["EvaluationBenchmark"]] = relationship(
         "EvaluationBenchmark",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    security_audit_logs: Mapped[list["SecurityAuditLog"]] = relationship(
+        "SecurityAuditLog",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    agent_security_policies: Mapped[list["AgentSecurityPolicy"]] = relationship(
+        "AgentSecurityPolicy",
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -508,6 +523,12 @@ class Agent(Base):
     file_changes: Mapped[list["TaskFileChange"]] = relationship(
         "TaskFileChange",
         back_populates="agent",
+    )
+    security_policy: Mapped["AgentSecurityPolicy | None"] = relationship(
+        "AgentSecurityPolicy",
+        uselist=False,
+        back_populates="agent",
+        cascade="all, delete-orphan",
     )
 
 
@@ -2583,4 +2604,178 @@ Index(
     "ix_evaluation_benchmarks_company_cat",
     EvaluationBenchmark.company_id,
     EvaluationBenchmark.category,
+)
+
+
+class SecurityAuditLog(Base):
+    """Immutable audit record for security-sensitive operations, access attempts, and threat mitigations per docs/Phases.md § 27 and docs/Rules.md § 185."""
+
+    __tablename__ = "security_audit_logs"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    actor_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="USER",
+        server_default="USER",
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="LOW",
+        server_default="LOW",
+        index=True,
+    )
+    resource_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="GENERAL", server_default="GENERAL"
+    )
+    resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    action_details: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    is_blocked: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationships
+    company: Mapped["Company | None"] = relationship(
+        "Company", back_populates="security_audit_logs"
+    )
+    user: Mapped["User | None"] = relationship("User", back_populates="security_audit_logs")
+
+
+class AgentSecurityPolicy(Base):
+    """Authoritative agent capability constraints, sandboxing, and Default-DENY access control per docs/Phases.md § 27 and docs/Rules.md § 185."""
+
+    __tablename__ = "agent_security_policies"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    default_posture: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="DENY",
+        server_default="DENY",
+    )
+    allowed_capabilities: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    denied_capabilities: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    rate_limit_rpm: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=60,
+        server_default="60",
+    )
+    max_daily_budget: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=50.0,
+        server_default="50.0",
+    )
+    can_execute_destructive_tools: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    requires_human_approval_for_tools: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+    is_quarantined: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    quarantine_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quarantined_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    company: Mapped["Company"] = relationship("Company", back_populates="agent_security_policies")
+    agent: Mapped["Agent"] = relationship("Agent", back_populates="security_policy")
+
+
+Index(
+    "ix_security_audit_logs_company_created",
+    SecurityAuditLog.company_id,
+    SecurityAuditLog.created_at,
+)
+Index("ix_security_audit_logs_event_sev", SecurityAuditLog.event_type, SecurityAuditLog.severity)
+Index(
+    "ix_agent_security_policies_company_agent",
+    AgentSecurityPolicy.company_id,
+    AgentSecurityPolicy.agent_id,
 )
