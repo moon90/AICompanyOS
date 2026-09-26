@@ -63,10 +63,14 @@ def _to_task_response(task: Task) -> TaskResponse:
 
     project_name = task.project.name if "project" not in unloaded and task.project else None
     assigned_agent_name = (
-        task.assigned_agent.name if "assigned_agent" not in unloaded and task.assigned_agent else None
+        task.assigned_agent.name
+        if "assigned_agent" not in unloaded and task.assigned_agent
+        else None
     )
     assigned_agent_role = (
-        task.assigned_agent.role if "assigned_agent" not in unloaded and task.assigned_agent else None
+        task.assigned_agent.role
+        if "assigned_agent" not in unloaded and task.assigned_agent
+        else None
     )
     department_name = (
         task.department.name if "department" not in unloaded and task.department else None

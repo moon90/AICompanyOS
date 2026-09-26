@@ -878,19 +878,23 @@ class VoiceService:
                 if count == 0:
                     spoken_response = "All tasks are progressing smoothly with no blocked items requiring attention."
                     detailed_response = "### Attention Overview\n- **Blocked / Critical Tasks**: 0\n- All workflows healthy."
-                    response_meta.update({"type": "attention", "count": 0, "names": "", "items_md": ""})
+                    response_meta.update(
+                        {"type": "attention", "count": 0, "names": "", "items_md": ""}
+                    )
                 else:
                     task_names = [t.title for t in attention_tasks[:2]]
                     names_str = " and ".join([f"'{name}'" for name in task_names])
                     spoken_response = f"{count} tasks require attention, including {names_str}."
                     items_md = "\n".join(f"- **{t.title}** ({t.status})" for t in attention_tasks)
                     detailed_response = f"### Tasks Requiring Attention ({count})\n" + items_md
-                    response_meta.update({
-                        "type": "attention",
-                        "count": count,
-                        "names": names_str,
-                        "items_md": items_md,
-                    })
+                    response_meta.update(
+                        {
+                            "type": "attention",
+                            "count": count,
+                            "names": names_str,
+                            "items_md": items_md,
+                        }
+                    )
                 context["last_topic"] = "attention_tasks"
                 action_taken = "FETCH_BLOCKED_TASKS"
 
@@ -943,13 +947,15 @@ class VoiceService:
 
                 spoken_response = f"The company has {proj_cnt} active projects and {in_prog} tasks in progress. {pending_appr} approvals are pending review."
                 detailed_response = f"### Executive Briefing\n- **Active Projects**: {proj_cnt}\n- **Total Tasks**: {tsk_cnt} ({in_prog} in progress)\n- **Pending Approvals**: {pending_appr}"
-                response_meta.update({
-                    "type": "general",
-                    "proj_cnt": proj_cnt,
-                    "tsk_cnt": tsk_cnt,
-                    "in_prog": in_prog,
-                    "pending_appr": pending_appr,
-                })
+                response_meta.update(
+                    {
+                        "type": "general",
+                        "proj_cnt": proj_cnt,
+                        "tsk_cnt": tsk_cnt,
+                        "in_prog": in_prog,
+                        "pending_appr": pending_appr,
+                    }
+                )
                 context["last_topic"] = "general_briefing"
                 action_taken = "FETCH_EXECUTIVE_BRIEFING"
 
@@ -1039,11 +1045,13 @@ class VoiceService:
 
             spoken_response = "The task has been created and assigned."
             detailed_response = f"### Task Created via Voice\n- **ID**: `{new_task.id}`\n- **Title**: {new_task.title}\n- **Assignee Role**: {target_role}\n- **Status**: PLANNED"
-            response_meta.update({
-                "task_id": new_task.id,
-                "title": new_task.title,
-                "target_role": target_role,
-            })
+            response_meta.update(
+                {
+                    "task_id": new_task.id,
+                    "title": new_task.title,
+                    "target_role": target_role,
+                }
+            )
             action_taken = "CREATE_TASK"
             action_entity_id = new_task.id
             context["last_task_id"] = new_task.id
@@ -1051,7 +1059,13 @@ class VoiceService:
 
         elif intent == VoiceIntent.APPROVAL_DECISION:
             session.state = VoiceState.EXECUTING.value
-            is_approve = "approve" in lower or "confirm" in lower or "accept" in lower or "অনুমোদন" in lower or "aprobar" in lower
+            is_approve = (
+                "approve" in lower
+                or "confirm" in lower
+                or "accept" in lower
+                or "অনুমোদন" in lower
+                or "aprobar" in lower
+            )
 
             # Find target approval
             appr_stmt = (
@@ -1072,12 +1086,14 @@ class VoiceService:
                 decision_word = "approved" if is_approve else "rejected"
                 spoken_response = f"The approval request for {appr.action_type or 'the task'} has been {decision_word}."
                 detailed_response = f"### Approval {decision_word.capitalize()}\n- **Approval ID**: `{appr.id}`\n- **Action**: {appr.action_type}\n- **Status**: {appr.status}"
-                response_meta.update({
-                    "has_appr": True,
-                    "is_approve": is_approve,
-                    "action_type": appr.action_type,
-                    "appr_id": appr.id,
-                })
+                response_meta.update(
+                    {
+                        "has_appr": True,
+                        "is_approve": is_approve,
+                        "action_type": appr.action_type,
+                        "appr_id": appr.id,
+                    }
+                )
                 action_taken = f"DECIDE_APPROVAL_{decision_word.upper()}"
                 action_entity_id = appr.id
                 context["last_approval_id"] = appr.id
@@ -1115,7 +1131,9 @@ class VoiceService:
                 task.status = "CANCELLED"
                 spoken_response = f"Task '{task.title}' has been stopped."
                 detailed_response = f"### Task Stopped\n- **ID**: `{task.id}`\n- **Title**: {task.title}\n- **New Status**: CANCELLED"
-                response_meta.update({"has_task": True, "task_id": task.id, "task_title": task.title})
+                response_meta.update(
+                    {"has_task": True, "task_id": task.id, "task_title": task.title}
+                )
                 action_taken = "STOP_TASK"
                 action_entity_id = task.id
             else:

@@ -412,4 +412,3 @@ async def test_voice_multilingual_responses(
     )
     assert resp_fr.intent == VoiceIntent.GENERAL_INQUIRY
     assert "reçu votre demande" in resp_fr.spoken_response
-
